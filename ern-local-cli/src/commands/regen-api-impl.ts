@@ -4,13 +4,12 @@ import {
   ModuleTypes,
   utils as coreUtils,
   yarn,
-  fileUtils,
   PackagePath,
   log,
 } from 'ern-core'
 import { epilog, logErrorAndExitIfNotSatisfied, tryCatchWrap } from '../lib'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs-extra'
 import semver from 'semver'
 import { Argv } from 'yargs'
 
@@ -63,7 +62,7 @@ export const handler = async ({
       throw new Error('no API version. This should not happen.')
     }
     api = PackagePath.fromString(
-      `${api.basePath}${apiVersion ? `@${apiVersion}` : ''}`
+      `${api.name}${apiVersion ? `@${apiVersion}` : ''}`
     )
 
     log.info(`regenerating api implementation for ${api.toString()}`)
@@ -105,12 +104,12 @@ export const handler = async ({
   async function readPackageJson(): Promise<any> {
     const packageJsonPath = path.join(process.cwd(), 'package.json')
     log.debug(`Reading package json: ${packageJsonPath}`)
-    if (!fs.existsSync(packageJsonPath)) {
+    if (!(await fs.pathExists(packageJsonPath))) {
       log.error(`${packageJsonPath} not found`)
       throw new Error(ERROR_MSG_NOT_IN_IMPL)
     }
 
-    const apiImplPackage = await fileUtils.readJSON(packageJsonPath)
+    const apiImplPackage = await fs.readJson(packageJsonPath)
     if (
       !apiImplPackage.ern ||
       (apiImplPackage.ern.moduleType !== ModuleTypes.NATIVE_API_IMPL &&
@@ -124,7 +123,7 @@ export const handler = async ({
 
   async function getApi(apiImplPackage: any): Promise<PackagePath> {
     for (const depKey of Object.keys(apiImplPackage.dependencies)) {
-      if (await coreUtils.isDependencyApi(depKey)) {
+      if (await coreUtils.isDependencyApi(PackagePath.fromString(depKey))) {
         // TODO: THis is by assuming that this is the only api dependency inside this implemenation.
         // TODO: This may not be right all the time as an api implementor can add more other apis as dependencies. Logic needs to be revisited.
         return PackagePath.fromString(
@@ -135,7 +134,7 @@ export const handler = async ({
     throw new Error('Unable to identify the api for this implementation')
   }
 
-  async function validatePackage(api) {
+  async function validatePackage(api: PackagePath) {
     if (!(await coreUtils.isPublishedToNpm(api.toString()))) {
       throw new Error(
         `${api.toString()}: Package not found in npm, please make sure this version of the api is published to npm.`
@@ -151,8 +150,8 @@ export const handler = async ({
     log.debug('Performing version check before regenerating the code.')
 
     if (!version) {
-      const latestReleasedPackageJson = await yarn.info(api, { json: true })
-      version = latestReleasedPackageJson.data.version
+      const latestReleasedPackageJson = await yarn.info(api)
+      version = latestReleasedPackageJson.version
     }
 
     if (version && semver.lte(version, currentApiVersion)) {
@@ -168,11 +167,6 @@ export const handler = async ({
 
   function getPlatforms(): string[] {
     const nativeDirectory = path.join(process.cwd(), 'android')
-
-    if (fs.existsSync(nativeDirectory)) {
-      return ['android', 'ios']
-    } else {
-      return ['js']
-    }
+    return fs.pathExistsSync(nativeDirectory) ? ['android', 'ios'] : ['js']
   }
 }

@@ -8,13 +8,14 @@ import log from './log'
 import { isDependencyJsApiImpl } from './utils'
 import path from 'path'
 import xcode from 'xcode-ern'
-import fs from 'fs'
+import fs from 'fs-extra'
 import _ from 'lodash'
 import readDir = require('fs-readdir-recursive')
 import kax from './kax'
 import { isDependencyPathNativeApiImpl } from './utils'
 import { readPackageJson } from './packageJsonFileUtils'
 import { getNativeDependencyPath } from './nativeDependenciesLookup'
+import { gitApply } from './gitApply'
 
 export async function fillProjectHull(
   pathSpec: {
@@ -33,9 +34,7 @@ export async function fillProjectHull(
   shell.pushd(pathSpec.rootDir)
 
   try {
-    if (!fs.existsSync(pathSpec.outputDir)) {
-      shell.mkdir(pathSpec.outputDir)
-    }
+    await fs.ensureDir(pathSpec.outputDir)
 
     shell.cp('-R', pathSpec.projectHullDir, pathSpec.outputDir)
 
@@ -69,7 +68,19 @@ export async function fillProjectHull(
     const injectPluginsTaskMsg = 'Injecting Native Dependencies'
     const injectPluginsKaxTask = kax.task(injectPluginsTaskMsg)
     for (const plugin of plugins) {
-      if (await isDependencyJsApiImpl(plugin)) {
+      const pluginSourcePath = composite
+        ? plugin.basePath
+        : await getNativeDependencyPath(
+            path.resolve(pathSpec.outputDir, '..', 'node_modules'),
+            plugin
+          )
+      if (!pluginSourcePath) {
+        throw new Error(`path to ${plugin.name} not found.`)
+      }
+
+      const localPluginPackage = PackagePath.fromString(pluginSourcePath)
+
+      if (await isDependencyJsApiImpl(localPluginPackage)) {
         log.debug('JS api implementation identified, skipping fill hull.')
         continue
       }
@@ -83,17 +94,7 @@ export async function fillProjectHull(
       }
 
       if (pluginConfig.ios) {
-        const pluginSourcePath = composite
-          ? await composite.getNativeDependencyPath(plugin)
-          : await getNativeDependencyPath(
-              path.resolve(pathSpec.outputDir, '..', 'node_modules'),
-              plugin
-            )
-        if (!pluginSourcePath) {
-          throw new Error(`path to ${plugin.basePath} not found.`)
-        }
-
-        log.debug(`Path to ${plugin.basePath} plugin : ${pluginSourcePath}`)
+        log.debug(`Path to ${plugin.name} plugin : ${pluginSourcePath}`)
 
         if (await isDependencyPathNativeApiImpl(pluginSourcePath)) {
           // For native api implementations, if a 'ern.pluginConfig' object
@@ -109,9 +110,7 @@ export async function fillProjectHull(
           }
         }
 
-        injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${
-          plugin.basePath
-        }]`
+        injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${plugin.name}]`
 
         if (pluginConfig.ios.copy) {
           for (const copy of pluginConfig.ios.copy) {
@@ -119,7 +118,7 @@ export async function fillProjectHull(
               log.debug(
                 `Handling copy directive: Falling back to old directory structure for API(Backward compatibility)`
               )
-              copy.source = path.join('IOS', 'IOS', 'Classes', 'SwaggersAPIs')
+              copy.source = path.normalize('IOS/IOS/Classes/SwaggersAPIs')
             }
           }
           handleCopyDirective(
@@ -132,12 +131,12 @@ export async function fillProjectHull(
         if (pluginConfig.ios.replaceInFile) {
           for (const r of pluginConfig.ios.replaceInFile) {
             const pathToFile = path.join(pathSpec.outputDir, r.path)
-            const fileContent = fs.readFileSync(pathToFile, 'utf8')
+            const fileContent = await fs.readFile(pathToFile, 'utf8')
             const patchedFileContent = fileContent.replace(
               RegExp(r.string, 'g'),
               r.replaceWith
             )
-            fs.writeFileSync(pathToFile, patchedFileContent, {
+            await fs.writeFile(pathToFile, patchedFileContent, {
               encoding: 'utf8',
             })
           }
@@ -170,6 +169,21 @@ export async function fillProjectHull(
           }
         }
 
+        if (pluginConfig.ios.applyPatch) {
+          const { patch, root } = pluginConfig.ios.applyPatch
+          if (!patch) {
+            throw new Error('Missing "patch" property in "applyPatch" object')
+          }
+          if (!root) {
+            throw new Error('Missing "root" property in "applyPatch" object')
+          }
+          const [patchFile, rootDir] = [
+            path.join(pluginConfig.path, patch),
+            path.join(pathSpec.outputDir, root),
+          ]
+          await gitApply({ patchFile, rootDir })
+        }
+
         if (pluginConfig.ios.pbxproj) {
           if (pluginConfig.ios.pbxproj.addSource) {
             for (const source of pluginConfig.ios.pbxproj.addSource) {
@@ -181,12 +195,8 @@ export async function fillProjectHull(
                   log.debug(
                     `Source Copy: Falling back to old directory structure for API(Backward compatibility)`
                   )
-                  source.from = path.join(
-                    'IOS',
-                    'IOS',
-                    'Classes',
-                    'SwaggersAPIs',
-                    '*.swift'
+                  source.from = path.normalize(
+                    'IOS/IOS/Classes/SwaggersAPIs/*.swift'
                   )
                 }
                 const relativeSourcePath = path.dirname(source.from)
@@ -195,7 +205,7 @@ export async function fillProjectHull(
                   relativeSourcePath
                 )
                 const fileNames = _.filter(
-                  fs.readdirSync(pathToSourceFiles),
+                  await fs.readdir(pathToSourceFiles),
                   f => f.endsWith(path.extname(source.from!))
                 )
                 for (const fileName of fileNames) {
@@ -227,12 +237,8 @@ export async function fillProjectHull(
                   log.debug(
                     `Header Copy: Falling back to old directory structure for API(Backward compatibility)`
                   )
-                  header.from = path.join(
-                    'IOS',
-                    'IOS',
-                    'Classes',
-                    'SwaggersAPIs',
-                    '*.swift'
+                  header.from = path.normalize(
+                    'IOS/IOS/Classes/SwaggersAPIs/*.swift'
                   )
                 }
                 const relativeHeaderPath = path.dirname(header.from)
@@ -241,7 +247,7 @@ export async function fillProjectHull(
                   relativeHeaderPath
                 )
                 const fileNames = _.filter(
-                  fs.readdirSync(pathToHeaderFiles),
+                  await fs.readdir(pathToHeaderFiles),
                   f => f.endsWith(path.extname(header.from!))
                 )
                 for (const fileName of fileNames) {
@@ -327,6 +333,16 @@ export async function fillProjectHull(
             }
           }
 
+          if (pluginConfig.ios.pbxproj.addEmbeddedFramework) {
+            for (const framework of pluginConfig.ios.pbxproj
+              .addEmbeddedFramework) {
+              iosProject.addFramework(framework, {
+                customFramework: true,
+                embed: true,
+              })
+            }
+          }
+
           if (pluginConfig.ios.pbxproj.addFrameworkSearchPath) {
             for (const p of pluginConfig.ios.pbxproj.addFrameworkSearchPath) {
               iosProject.addToFrameworkSearchPaths(p)
@@ -347,7 +363,7 @@ export async function fillProjectHull(
 async function getIosProject(projectPath: string): Promise<any> {
   const project = xcode.project(projectPath)
   return new Promise((resolve, reject) => {
-    project.parse(err => {
+    project.parse((err: any) => {
       if (err) {
         log.error(`failed to get ios project : ${JSON.stringify(err)}`)
         reject(err)
@@ -363,10 +379,12 @@ function switchToOldDirectoryStructure(
   tail: string
 ): boolean {
   // This is to check if the api referenced during container generation is created using the old or new directory structure to help keep the backward compatibility.
-  const pathToSwaggersAPIs = path.join('IOS', 'IOS', 'Classes', 'SwaggersAPIs')
+  const pathToSwaggersAPIs = path.normalize('IOS/IOS/Classes/SwaggersAPIs')
   if (
     path.dirname(tail) === `IOS` &&
-    fs.existsSync(path.join(pluginSourcePath, path.dirname(pathToSwaggersAPIs)))
+    fs.pathExistsSync(
+      path.join(pluginSourcePath, path.dirname(pathToSwaggersAPIs))
+    )
   ) {
     return true
   }

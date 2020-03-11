@@ -1,5 +1,4 @@
 const path = require('path')
-const randomInt = require('../utils/randomInt')
 
 const baseConstants = {
   notInNpmPkg: 'ewkljrlwjerjlwjrl@0.0.3',
@@ -9,9 +8,10 @@ const baseConstants = {
   cauldronName: 'cauldron-system-tests',
   systemTestMiniAppName: 'MiniAppSystemTest',
   systemTestMiniAppPkgName: 'miniapp-system-test',
-  testApiName: 'TestApi',
-  testApiPkgName: 'test',
-  complexApiName: 'ComplexApi',
+  testApiName: 'testapi',
+  testApiPkgName: 'test-api',
+  complexApiName: 'complexapi',
+  complexApiPkgName: 'complex-api',
   invalidElectrodeNativeModuleName: 'Test-Api',
   systemTestNativeApplicationName: 'system-test-app',
   systemTestNativeApplicationVersion1: '1.0.0',
@@ -31,8 +31,8 @@ const pathConstants = {
   pathToNativeApiImplFixture: path.join(__dirname, 'api-impl-native'),
   pathToAndroidContainerFixture: path.join(__dirname, 'android-container'),
   pathToIosContainerFixture: path.join(__dirname, 'ios-container'),
-  pathToBaseApiFixture: path.join(__dirname, 'api', baseConstants.testApiName),
-  pathToComplexApiFixture: path.join(__dirname, 'api', baseConstants.complexApiName),
+  pathToBaseApiFixture: path.join(__dirname, 'api', baseConstants.testApiPkgName),
+  pathToComplexApiFixture: path.join(__dirname, 'api', baseConstants.complexApiPkgName),
   pathToComplexApiSchema: path.join(__dirname, 'api', 'complexapi-schema.json'),
   pathToTestApiSchema: path.join(__dirname, 'api', 'testapi-schema.json')
 }

@@ -32,7 +32,7 @@ const codePushNewEntryFixture: CauldronCodePushEntry = {
 let documentStore
 let fileStore
 
-const fixtureFileStorePath = path.join(__dirname, 'fixtures', 'filestore')
+const fixtureFileStorePath = path.join(__dirname, 'fixtures/filestore')
 
 function cauldronApi({
   cauldronDocument,
@@ -65,14 +65,14 @@ describe('CauldronApi.js', () => {
       sandbox.stub(utils, 'isGitBranch').resolves(true)
       const fixture = JSON.parse(
         fs
-          .readFileSync(path.join(__dirname, 'fixtures', 'cauldron-0.0.0.json'))
+          .readFileSync(path.join(__dirname, 'fixtures/cauldron-0.0.0.json'))
           .toString()
       )
       const api = cauldronApi({ cauldronDocument: fixture })
       await api.upgradeCauldronSchema()
       const expectedCauldronDoc = JSON.parse(
         fs
-          .readFileSync(path.join(__dirname, 'fixtures', 'cauldron-3.0.0.json'))
+          .readFileSync(path.join(__dirname, 'fixtures/cauldron-3.0.0.json'))
           .toString()
       )
       const cauldronDoc = await api.getCauldron()
@@ -465,7 +465,9 @@ describe('CauldronApi.js', () => {
   describe('setCodePushEntries', () => {
     it('should set the code push entries', async () => {
       const tmpFixture = JSON.parse(JSON.stringify(fixtures.defaultCauldron))
-      await cauldronApi({ cauldronDocument: tmpFixture }).setCodePushEntries(
+      await cauldronApi({
+        cauldronDocument: tmpFixture,
+      }).setCodePushEntries(
         AppVersionDescriptor.fromString('test:android:17.7.0'),
         'QA',
         [codePushNewEntryFixture]
@@ -734,7 +736,7 @@ describe('CauldronApi.js', () => {
         storePath: fixtureFileStorePath,
       }).getConfig(AppVersionDescriptor.fromString('test:android:17.7.0'))
       const config = fs.readFileSync(
-        path.join(fixtureFileStorePath, 'config', 'test-android-17.7.0.json')
+        path.join(fixtureFileStorePath, 'config/test-android-17.7.0.json')
       )
       expect(configObj).eql(JSON.parse(config.toString()))
     })
@@ -755,7 +757,7 @@ describe('CauldronApi.js', () => {
         storePath: fixtureFileStorePath,
       }).getConfig(AppPlatformDescriptor.fromString('test:android'))
       const config = fs.readFileSync(
-        path.join(fixtureFileStorePath, 'config', 'test-android.json')
+        path.join(fixtureFileStorePath, 'config/test-android.json')
       )
       expect(configObj).eql(JSON.parse(config.toString()))
     })
@@ -776,7 +778,7 @@ describe('CauldronApi.js', () => {
         storePath: fixtureFileStorePath,
       }).getConfig(AppNameDescriptor.fromString('test'))
       const config = fs.readFileSync(
-        path.join(fixtureFileStorePath, 'config', 'test.json')
+        path.join(fixtureFileStorePath, 'config/test.json')
       )
       expect(configObj).eql(JSON.parse(config.toString()))
     })
@@ -952,10 +954,9 @@ describe('CauldronApi.js', () => {
   describe('createPlatform', () => {
     it('should create the platform object', async () => {
       const tmpFixture = JSON.parse(JSON.stringify(fixtures.defaultCauldron))
-      await cauldronApi({ cauldronDocument: tmpFixture }).createPlatform(
-        AppNameDescriptor.fromString('test'),
-        { name: 'ios' }
-      )
+      await cauldronApi({
+        cauldronDocument: tmpFixture,
+      }).createPlatform(AppNameDescriptor.fromString('test'), { name: 'ios' })
       const platform = jp.query(
         tmpFixture,
         '$.nativeApps[?(@.name=="test")].platforms[?(@.name=="ios")]'
@@ -1039,10 +1040,11 @@ describe('CauldronApi.js', () => {
   describe('createVersion', () => {
     it('should create the version object', async () => {
       const tmpFixture = JSON.parse(JSON.stringify(fixtures.defaultCauldron))
-      await cauldronApi({ cauldronDocument: tmpFixture }).createVersion(
-        AppPlatformDescriptor.fromString('test:android'),
-        { name: '17.20.0' }
-      )
+      await cauldronApi({
+        cauldronDocument: tmpFixture,
+      }).createVersion(AppPlatformDescriptor.fromString('test:android'), {
+        name: '17.20.0',
+      })
       const version = jp.query(
         tmpFixture,
         '$.nativeApps[?(@.name=="test")].platforms[?(@.name=="android")].versions[?(@.name=="17.20.0")]'
@@ -1141,10 +1143,11 @@ describe('CauldronApi.js', () => {
   describe('updateVersion', () => {
     it('should perform the update', async () => {
       const tmpFixture = JSON.parse(JSON.stringify(fixtures.defaultCauldron))
-      await cauldronApi({ cauldronDocument: tmpFixture }).updateVersion(
-        AppVersionDescriptor.fromString('test:android:17.7.0'),
-        { isReleased: false }
-      )
+      await cauldronApi({
+        cauldronDocument: tmpFixture,
+      }).updateVersion(AppVersionDescriptor.fromString('test:android:17.7.0'), {
+        isReleased: false,
+      })
       const version = jp.query(
         tmpFixture,
         '$.nativeApps[?(@.name=="test")].platforms[?(@.name=="android")].versions[?(@.name=="17.7.0")]'

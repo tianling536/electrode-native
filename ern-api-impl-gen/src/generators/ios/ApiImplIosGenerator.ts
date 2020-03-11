@@ -7,7 +7,7 @@ import {
   log,
 } from 'ern-core'
 import { ApiImplGeneratable } from '../../ApiImplGeneratable'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import xcode from 'xcode-ern'
 import readDir from 'fs-readdir-recursive'
@@ -16,7 +16,7 @@ export const ROOT_DIR = shell.pwd()
 const API_IMPL_GROUP_NAME = 'APIImpls'
 
 export default class ApiImplIosGenerator implements ApiImplGeneratable {
-  public static getMustacheFileNamesMap(resourceDir, apiName) {
+  public static getMustacheFileNamesMap(resourceDir: string, apiName: string) {
     const files = readDir(resourceDir, f => f.endsWith('.mustache'))
     const classNames = {
       'apiController.mustache': `${apiName}ApiController.swift`,
@@ -53,7 +53,7 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
     try {
       const pathSpec = {
         outputDir: path.join(paths.outDirectory, 'ios'),
-        projectHullDir: path.join(paths.apiImplHull, 'ios', '{.*,*}'),
+        projectHullDir: path.join(paths.apiImplHull, 'ios/{.*,*}'),
         rootDir: ROOT_DIR,
       }
 
@@ -89,7 +89,7 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
     const containerProject = xcode.project(apiImplProjectPath)
 
     return new Promise((resolve, reject) => {
-      containerProject.parse(err => {
+      containerProject.parse((err: any) => {
         if (err) {
           reject(err)
         }
@@ -122,7 +122,7 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
       )
 
       for (const file of files) {
-        if (!classNames[file]) {
+        if (!(classNames as { [k: string]: string })[file]) {
           log.warn(
             `Skipping mustaching of ${file}. No resulting file mapping found, consider adding one. \nThis might cause issues in generated implementation project.`
           )
@@ -149,10 +149,13 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
         await mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
           path.join(resourceDir, file),
           api,
-          path.join(outputDir, classNames[file])
+          path.join(outputDir, (classNames as { [k: string]: string })[file])
         )
         iosProject.addSourceFile(
-          path.join(API_IMPL_GROUP_NAME, classNames[file]),
+          path.join(
+            API_IMPL_GROUP_NAME,
+            (classNames as { [k: string]: string })[file]
+          ),
           null,
           iosProject.findPBXGroupKey({ name: API_IMPL_GROUP_NAME })
         )
@@ -171,9 +174,7 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
   ) {
     const resourceDir = path.join(
       Platform.currentPlatformVersionPath,
-      'ern-api-impl-gen',
-      'resources',
-      'ios'
+      'ern-api-impl-gen/resources/ios'
     )
     const outputDir = path.join(
       pathSpec.outputDir,
@@ -184,9 +185,8 @@ export default class ApiImplIosGenerator implements ApiImplGeneratable {
     const requestHandlerConfigFile = 'RequestHandlerConfig.swift'
     const requestHandlerProviderFile = 'RequestHandlerProvider.swift'
 
-    if (!shell.test('-e', outputDir)) {
-      shell.mkdir(outputDir)
-    }
+    fs.ensureDirSync(outputDir)
+
     shell.cp(path.join(resourceDir, requestHandlerConfigFile), outputDir)
     shell.cp(path.join(resourceDir, requestHandlerProviderFile), outputDir)
 

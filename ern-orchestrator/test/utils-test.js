@@ -32,7 +32,7 @@ import { getDefaultExtraConfigurationOfPublisherFromCauldron } from '../src/getD
 const basicCauldronFixture = utilFixtures.defaultCauldron
 const emptyCauldronFixture = utilFixtures.emptyCauldron
 const npmPackageExists = require('./fixtures/npmPkgExistsResponse.json')
-const npmPackageDoesNotExists = '' // 2> /dev/null suppresses stderr in yarn.info
+const npmPackageDoesNotExists = ''
 const sandbox = sinon.createSandbox()
 const topLevelContainerVersion = '1.2.3'
 
@@ -269,7 +269,7 @@ describe('utils.js', () => {
     it('should return parsed json if value is a json file', async () => {
       expect(
         await parseJsonFromStringOrFile(
-          path.resolve(__dirname, 'fixtures', 'dummy.json')
+          path.resolve(__dirname, 'fixtures/dummy.json')
         )
       ).eql({
         key: 'value',

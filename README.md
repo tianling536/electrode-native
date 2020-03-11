@@ -10,6 +10,7 @@
 ![Current version](https://img.shields.io/npm/v/ern-local-cli.svg?label=current)
 [![Coverage Status](https://coveralls.io/repos/github/electrode-io/electrode-native/badge.svg?branch=master&service=github)](https://coveralls.io/github/electrode-io/electrode-native?branch=master&service=github)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![ci][1]][2]
 
 | Test Suite | Status |
 | :--- | :--- |
@@ -20,10 +21,11 @@
 
 ### Prerequisites
 
-- Node.js >= 8
+- Node.js >= 8.3
 - NPM >= 3.0
 - Android Studio (for Android apps)
 - Xcode >= 10 (for iOS apps)
+- CocoaPods (for iOS apps using a version of React Native >= 0.60)
 
 ### Install
 
@@ -113,3 +115,8 @@ Thank you.
 [platform use]: https://native.electrode.io/cli-commands/platform/use
 
 [Electrode Native Case Study]: https://www.walmartlabs.com/case-studies/electrode-native
+
+[CocoaPods]: https://cocoapods.org
+
+[1]: https://github.com/electrode-io/electrode-native/workflows/ci/badge.svg
+[2]: https://github.com/electrode-io/electrode-native/actions

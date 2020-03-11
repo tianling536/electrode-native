@@ -9,8 +9,11 @@ import {
   AppPlatformDescriptor,
   AppVersionDescriptor,
   AnyAppDescriptor,
+  AppNameDescriptor,
 } from 'ern-core'
 import {
+  CauldronNativeApp,
+  CauldronNativeAppPlatform,
   CauldronCodePushMetadata,
   CauldronCodePushEntry,
   CauldronConfigLevel,
@@ -20,6 +23,7 @@ import {
 } from './types'
 import CauldronApi from './CauldronApi'
 import semver from 'semver'
+import fs from 'fs-extra'
 
 //
 // Helper class to access the cauldron
@@ -255,11 +259,14 @@ export class CauldronHelper {
       descriptor,
       'Cannot add a native dependency to a released native app version'
     )
-    return this.cauldron.setPackagesInContainer(
-      descriptor,
-      dependencies,
-      'nativeDeps'
+
+    // Make sure we transform local fs package path to registry paths
+    // for native dependencies
+    const deps = dependencies.map(d =>
+      PackagePath.fromString(`${d.name}@${d.version}`)
     )
+
+    return this.cauldron.setPackagesInContainer(descriptor, deps, 'nativeDeps')
   }
 
   public async removeMiniAppFromContainer(
@@ -334,7 +341,19 @@ export class CauldronHelper {
     return result
   }
 
-  public async getDescriptor(descriptor: AnyAppDescriptor): Promise<any> {
+  public async getDescriptor(
+    descriptor: AppPlatformDescriptor
+  ): Promise<CauldronNativeAppPlatform>
+
+  public async getDescriptor(
+    descriptor: AppVersionDescriptor
+  ): Promise<CauldronNativeAppVersion>
+
+  public async getDescriptor(
+    descriptor: AppNameDescriptor
+  ): Promise<CauldronNativeApp>
+
+  public async getDescriptor(descriptor: AnyAppDescriptor) {
     return this.cauldron.getDescriptor(descriptor)
   }
 
@@ -363,7 +382,7 @@ export class CauldronHelper {
     localFilePath: string
     cauldronFilePath: string
   }) {
-    const fileContent = await fileUtils.readFile(localFilePath)
+    const fileContent = await fs.readFile(localFilePath)
     const isExecutable = await fileUtils.isExecutable(localFilePath)
     return this.cauldron.addFile({
       cauldronFilePath,
@@ -379,7 +398,7 @@ export class CauldronHelper {
     localFilePath: string
     cauldronFilePath: string
   }) {
-    const fileContent = await fileUtils.readFile(localFilePath)
+    const fileContent = await fs.readFile(localFilePath)
     const isExecutable = await fileUtils.isExecutable(localFilePath)
     return this.cauldron.updateFile({
       cauldronFilePath,
@@ -416,7 +435,7 @@ export class CauldronHelper {
     key: string,
     yarnlockPath: string
   ): Promise<string> {
-    const yarnLockFile = await fileUtils.readFile(yarnlockPath)
+    const yarnLockFile = await fs.readFile(yarnlockPath)
     return this.cauldron.addYarnLock(descriptor, key, yarnLockFile)
   }
 
@@ -430,7 +449,7 @@ export class CauldronHelper {
   public async getPathToYarnLock(
     descriptor: AppVersionDescriptor,
     key: string
-  ): Promise<string | void> {
+  ): Promise<string | undefined> {
     return this.cauldron.getPathToYarnLock(descriptor, key)
   }
 
@@ -446,7 +465,7 @@ export class CauldronHelper {
     key: string,
     yarnlockPath: string
   ): Promise<boolean> {
-    const yarnLockFile = await fileUtils.readFile(yarnlockPath)
+    const yarnLockFile = await fs.readFile(yarnlockPath)
     return this.cauldron.updateYarnLock(descriptor, key, yarnLockFile)
   }
 
@@ -775,35 +794,46 @@ export class CauldronHelper {
     }: {
       label?: string
     } = {}
-  ): Promise<CauldronCodePushEntry | void> {
+  ): Promise<CauldronCodePushEntry | never> {
     const codePushEntries = await this.cauldron.getCodePushEntries(
       descriptor,
       deploymentName
     )
-    let result
+    let result: CauldronCodePushEntry | undefined
     if (codePushEntries) {
       if (label) {
         result = _.find(codePushEntries, e => e.metadata.label === label)
-        if (!result || result.length === 0) {
+        if (!result) {
           throw new Error(
             `No CodePush entry matching label ${label} was found in ${descriptor.toString()}`
           )
         }
       } else {
         result = _.last(codePushEntries)
+        if (!result) {
+          throw new Error(
+            `No CodePush entry matching label found for ${descriptor} ${deploymentName} deployment}`
+          )
+        }
       }
+      return result
+    } else {
+      throw new Error(
+        `No code push entries found for ${descriptor} ${deploymentName} deployment`
+      )
     }
-    return result
   }
 
-  public async getContainerMiniAppsBranches(descriptor) {
+  public async getContainerMiniAppsBranches(descriptor: AppVersionDescriptor) {
     const miniAppsBranches = await this.cauldron.getContainerMiniAppsBranches(
       descriptor
     )
     return _.map(miniAppsBranches, PackagePath.fromString)
   }
 
-  public async getContainerJsApiImplsBranches(descriptor) {
+  public async getContainerJsApiImplsBranches(
+    descriptor: AppVersionDescriptor
+  ) {
     const branches = await this.cauldron.getContainerJsApiImplsBranches(
       descriptor
     )
@@ -917,11 +947,7 @@ export class CauldronHelper {
     let updatedEntriesArr
 
     if (codePushEntries) {
-      if (
-        codePushConfig &&
-        codePushConfig.entriesLimit &&
-        codePushEntries.length >= codePushConfig.entriesLimit
-      ) {
+      if (codePushEntries.length >= codePushConfig?.entriesLimit) {
         nbEntriesToDrop =
           codePushEntries.length - codePushConfig.entriesLimit + 1
       }
@@ -1045,6 +1071,12 @@ export class CauldronHelper {
     return this.getConfigForKey('binaryStore', descriptor)
   }
 
+  public async getBugsnagConfig(
+    descriptor?: AnyAppDescriptor
+  ): Promise<any | void> {
+    return this.getConfigForKey('bugsnag', descriptor)
+  }
+
   public async getBundleStoreConfig(
     descriptor?: AnyAppDescriptor
   ): Promise<any | void> {
@@ -1065,7 +1097,7 @@ export class CauldronHelper {
 
   public async getStartCommandConfig(
     descriptor?: AnyAppDescriptor
-  ): Promise<CauldronStartCommandConfig | void> {
+  ): Promise<CauldronStartCommandConfig | undefined> {
     return this.getConfigForKey('start', descriptor)
   }
 
@@ -1231,12 +1263,12 @@ export class CauldronHelper {
     descriptor: AppVersionDescriptor
   ): Promise<PackagePath[]> {
     const result: PackagePath[] = []
-    const miniAppsBranches = (await this.cauldron.getContainerMiniAppsBranches(
-      descriptor
-    )).map(p => PackagePath.fromString(p))
-    const miniApps = (await this.cauldron.getContainerMiniApps(descriptor)).map(
-      p => PackagePath.fromString(p)
-    )
+    const miniAppsBranches = (
+      await this.cauldron.getContainerMiniAppsBranches(descriptor)
+    ).map(p => PackagePath.fromString(p))
+    const miniApps = (
+      await this.cauldron.getContainerMiniApps(descriptor)
+    ).map(p => PackagePath.fromString(p))
     for (const miniAppBranch of miniAppsBranches) {
       const latestCommitSha = await coreUtils.getCommitShaOfGitBranchOrTag(
         miniAppBranch
@@ -1258,12 +1290,12 @@ export class CauldronHelper {
     descriptor: AppVersionDescriptor
   ) {
     const result: PackagePath[] = []
-    const jsApiImplsBranches = (await this.cauldron.getContainerJsApiImplsBranches(
-      descriptor
-    )).map(p => PackagePath.fromString(p))
-    const jsApiImpls = (await this.cauldron.getContainerJsApiImpls(
-      descriptor
-    )).map(p => PackagePath.fromString(p))
+    const jsApiImplsBranches = (
+      await this.cauldron.getContainerJsApiImplsBranches(descriptor)
+    ).map(p => PackagePath.fromString(p))
+    const jsApiImpls = (
+      await this.cauldron.getContainerJsApiImpls(descriptor)
+    ).map(p => PackagePath.fromString(p))
     for (const jsApiImplBranch of jsApiImplsBranches) {
       const latestCommitSha = await coreUtils.getCommitShaOfGitBranchOrTag(
         jsApiImplBranch

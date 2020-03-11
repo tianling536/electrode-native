@@ -43,17 +43,6 @@ export default class Ensure {
     }
   }
 
-  public static isValidContainerVersion(
-    version: string,
-    extraErrorMessage: string = ''
-  ) {
-    if (/^\d+.\d+.\d+$/.test(version) === false) {
-      throw new Error(
-        `${version} is not a valid container version.\n${extraErrorMessage}`
-      )
-    }
-  }
-
   public static async isNewerContainerVersion(
     descriptor: string | AppVersionDescriptor,
     containerVersion: string,
@@ -63,13 +52,19 @@ export default class Ensure {
     const cauldronContainerVersion = await cauldron.getTopLevelContainerVersion(
       coreUtils.coerceToAppVersionDescriptor(descriptor)
     )
-    if (
-      cauldronContainerVersion &&
-      !semver.gt(containerVersion, cauldronContainerVersion)
-    ) {
-      throw new Error(
-        `Container version ${containerVersion} is older than ${cauldronContainerVersion}\n${extraErrorMessage}`
-      )
+
+    if (cauldronContainerVersion) {
+      // If both versions are valid semver versions, use semver comparison
+      // otherwise just use string lexographical comparison
+      const gt =
+        semver.valid(containerVersion) && semver.valid(cauldronContainerVersion)
+          ? semver.gt(containerVersion, cauldronContainerVersion)
+          : containerVersion > cauldronContainerVersion
+      if (!gt) {
+        throw new Error(
+          `Container version ${containerVersion} is older than ${cauldronContainerVersion}\n${extraErrorMessage}`
+        )
+      }
     }
   }
 
@@ -251,9 +246,7 @@ export default class Ensure {
         ))
       ) {
         throw new Error(
-          `${
-            dependency.basePath
-          } does not exists in ${napDescriptor}.\n${extraErrorMessage}`
+          `${dependency.basePath} does not exists in ${napDescriptor}.\n${extraErrorMessage}`
         )
       }
     }
@@ -343,7 +336,7 @@ export default class Ensure {
         miniApps,
         dependency
       )
-      if (miniAppsUsingDependency && miniAppsUsingDependency.length > 0) {
+      if (miniAppsUsingDependency?.length > 0) {
         let errorMessage = ''
         errorMessage += 'The following MiniApp(s) are using this dependency\n'
         for (const miniApp of miniAppsUsingDependency) {
@@ -486,7 +479,7 @@ export default class Ensure {
     const availablePlatformKeys = () =>
       constants.availableUserConfigKeys.map(e => e.name)
     if (!availablePlatformKeys().includes(key)) {
-      const closestKeyName = k =>
+      const closestKeyName = (k: string) =>
         availablePlatformKeys().reduce((acc, cur) =>
           levenshtein.get(acc, k) > levenshtein.get(cur, k) ? cur : acc
         )
@@ -518,9 +511,7 @@ export default class Ensure {
             throw new Error(`Missing version for ${dependency}`)
           } else if (!semver.valid(dependency.version)) {
             throw new Error(
-              `Unsupported version ${dependency.version} for ${
-                dependency.basePath
-              }`
+              `Unsupported version ${dependency.version} for ${dependency.basePath}`
             )
           }
         } else if (!dependency.version) {

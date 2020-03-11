@@ -5,7 +5,7 @@ import { copyRnConfigAssets } from './copyRnConfigAssets'
 import { addContainerMetadata } from './addContainerMetadata'
 import { ContainerGeneratorConfig, ContainerGenResult } from './types'
 import { kax, shell, BundlingResult } from 'ern-core'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import _ from 'lodash'
 
@@ -13,27 +13,31 @@ type ContainerGeneratorAction = (
   config: ContainerGeneratorConfig
 ) => Promise<any>
 
+type PostBundleAction = (
+  config: ContainerGeneratorConfig,
+  bundle: BundlingResult
+) => Promise<any>
+
 export async function generateContainer(
   config: ContainerGeneratorConfig,
   {
     fillContainerHull,
     postCopyRnpmAssets,
+    postBundle,
   }: {
     fillContainerHull?: ContainerGeneratorAction
     postCopyRnpmAssets?: ContainerGeneratorAction
+    postBundle?: PostBundleAction
   } = {}
 ): Promise<ContainerGenResult> {
-  if (!fs.existsSync(config.outDir)) {
-    shell.mkdir('-p', config.outDir)
-  } else {
-    shell.rm('-rf', path.join(config.outDir, '{.*,*}'))
-  }
+  fs.ensureDirSync(config.outDir)
+  shell.rm('-rf', path.join(config.outDir, '{.*,*}'))
 
   config.plugins = sortDependenciesByName(config.plugins)
 
   const reactNativePlugin = _.find(
     config.plugins,
-    p => p.basePath === 'react-native'
+    p => p.name === 'react-native'
   )
 
   // React-native plugin should be first in the dependencies
@@ -57,11 +61,17 @@ export async function generateContainer(
     .run(
       bundleMiniAppsFromComposite({
         compositeDir: config.composite.path,
+        dev: !!config.devJsBundle,
         outDir: config.outDir,
         platform: config.targetPlatform,
+        resetCache: config.resetCache,
         sourceMapOutput: config.sourceMapOutput,
       })
     )
+
+  if (postBundle) {
+    await postBundle(config, bundlingResult)
+  }
 
   if (!config.ignoreRnpmAssets) {
     copyRnpmAssets(

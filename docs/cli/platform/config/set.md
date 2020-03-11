@@ -68,13 +68,49 @@ HTTP/HTTPS proxy to use to connect to the bundle store server.
 Should be the full url to the proxy, including the port. For example `http://10.0.0.0:9089`.  
 **default** : no proxy
 
-- `sourceMapStoreProxy` [string]  
+- `sourceMapStoreProxy` [string]
 HTTP/HTTPS proxy to use to connect to the source map store server.  
 Should be the full url to the proxy, including the port. For example `http://10.0.0.0:9089`.  
 **default** : no proxy
 
+- `binaryStoreProxy` [string]  
+HTTP/HTTPS proxy to use to connect to the binary store server.  
+Should be the full url to the proxy, including the port. For example `http://10.0.0.0:9089`.  
+**default** : no proxy
+
+- `manifest` [object]\
+Master and/or overide manifest paths to be used locally.\
+**If this object in defined in local configuration, it will take precedence over any cauldron manifest configuration**\
+For example :
+```json
+{
+  "manifest": {
+    "master": {
+      "url": "/local/path/to/master/manifest"
+    },
+    "override": {
+      "type": "partial",
+      "url": "/local/path/to/override/manifest"
+    }
+  }
+}
+```
+
 #### Remarks
  
 * In case a value already exists in the configuration for a given key, this command will not fail and will overwrite the existing value.
+
+### Placeholders
+
+Electrode Native supports the following placeholders and will replace them accordingly when loading the configuration :
+
+- `${env.ENV_VAR_KEY}`\
+Will be replaced with the value of `ENV_VAR_KEY` environment variable.
+
+- `${ERNRC}`\
+Will be replaced with the path to the directory containing the resolved `.ernrc` configuration.
+
+- `${PWD}`\
+Will be replaced with current process working directory.
 
 [Electrode Native bundle store server]: https://github.com/electrode-io/ern-bundle-store

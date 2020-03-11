@@ -36,12 +36,16 @@ export async function runLocalContainerGen(
     jsMainModuleName,
     extra,
     sourceMapOutput,
+    devJsBundle,
+    resetCache,
   }: {
     outDir?: string
     ignoreRnpmAssets?: boolean
     jsMainModuleName?: string
     extra?: any
     sourceMapOutput?: string
+    devJsBundle?: boolean
+    resetCache?: boolean
   }
 ): Promise<ContainerGenResult> {
   try {
@@ -54,10 +58,13 @@ export async function runLocalContainerGen(
       generator.generate({
         androidConfig: (extra && extra.androidConfig) || {},
         composite,
+        devJsBundle,
         ignoreRnpmAssets,
         jsMainModuleName,
         outDir,
         plugins: nativeDependencies,
+        resetCache,
+        sourceMapOutput,
         targetPlatform: platform,
       })
     )
@@ -72,12 +79,16 @@ export async function runCauldronContainerGen(
   napDescriptor: AppVersionDescriptor,
   composite: Composite,
   {
+    devJsBundle,
     jsMainModuleName,
     outDir,
+    resetCache,
     sourceMapOutput,
   }: {
+    devJsBundle?: boolean
     jsMainModuleName?: string
     outDir?: string
+    resetCache?: boolean
     sourceMapOutput?: string
   } = {}
 ): Promise<ContainerGenResult> {
@@ -106,12 +117,17 @@ export async function runCauldronContainerGen(
           androidConfig:
             containerGeneratorConfig && containerGeneratorConfig.androidConfig,
           composite,
+          devJsBundle:
+            devJsBundle === undefined
+              ? containerGeneratorConfig && containerGeneratorConfig.devJsBundle
+              : devJsBundle,
           ignoreRnpmAssets:
             containerGeneratorConfig &&
             containerGeneratorConfig.ignoreRnpmAssets,
           jsMainModuleName,
           outDir: outDir || Platform.getContainerGenOutDirectory(platform),
           plugins,
+          resetCache,
           sourceMapOutput,
           targetPlatform: platform,
         })
@@ -130,11 +146,13 @@ export async function runCaudronBundleGen(
     baseComposite,
     compositeDir,
     outDir,
+    resetCache,
     resolutions,
   }: {
     baseComposite?: PackagePath
     compositeDir?: string
     outDir: string
+    resetCache?: boolean
     resolutions?: { [pkg: string]: string }
   }
 ): Promise<BundlingResult> {
@@ -175,6 +193,7 @@ export async function runCaudronBundleGen(
           baseComposite,
           jsApiImplDependencies: jsApiImpls,
           pathToYarnLock: pathToYarnLock || undefined,
+          resetCache,
           resolutions,
         }
       )
@@ -183,23 +202,6 @@ export async function runCaudronBundleGen(
     log.error(`runCauldronBundleGen failed: ${e}`)
     throw e
   }
-}
-
-export function containsVersionMismatch(
-  versions: string[],
-  mismatchLevel: 'major' | 'minor' | 'patch'
-): boolean {
-  const minVersion = semver.minSatisfying(versions, '*')
-  const maxVersion = semver.maxSatisfying(versions, '*')
-  const majorMismatch = semver.major(maxVersion) !== semver.major(minVersion)
-  const minorMismatch = semver.minor(maxVersion) !== semver.minor(minVersion)
-  const patchMismatch = semver.patch(maxVersion) !== semver.patch(minVersion)
-  return (
-    majorMismatch ||
-    (minorMismatch &&
-      (mismatchLevel === 'minor' || mismatchLevel === 'patch')) ||
-    (patchMismatch && mismatchLevel === 'patch')
-  )
 }
 
 function getGeneratorForPlatform(platform: string): ContainerGenerator {

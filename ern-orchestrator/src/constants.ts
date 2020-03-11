@@ -71,4 +71,20 @@ export const availableUserConfigKeys = [
     name: 'sourceMapStoreProxy',
     values: ['string'],
   },
+  {
+    desc: 'HTTP/HTTPS proxy to use to connect to the binary store server',
+    name: 'binaryStoreProxy',
+    values: ['string'],
+  },
+  {
+    desc: 'HTTP/HTTPS proxy to use to connect to Bugsnag',
+    name: 'bugsnagProxy',
+    values: ['string'],
+  },
+  {
+    desc:
+      'Local manifest configuration (takes precedence on manifest configuration from cauldron)',
+    name: 'manifest',
+    values: ['object'],
+  },
 ]

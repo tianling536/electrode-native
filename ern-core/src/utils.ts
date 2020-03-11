@@ -6,11 +6,8 @@ import _ from 'lodash'
 import { manifest } from './Manifest'
 import * as ModuleType from './ModuleTypes'
 import path from 'path'
-import fs from 'fs'
 import log from './log'
-import config from './config'
 import camelCase = require('lodash/camelCase')
-import { packageCache } from './packageCache'
 import { readPackageJson } from './packageJsonFileUtils'
 import {
   AppNameDescriptor,
@@ -28,28 +25,23 @@ export async function isPublishedToNpm(
     pkg = PackagePath.fromString(pkg)
   }
 
-  let publishedVersionsInfo
+  let publishedVersions: string[] | undefined
   try {
-    publishedVersionsInfo = await yarn.info(pkg, {
+    publishedVersions = await yarn.info(pkg, {
       field: 'versions',
-      json: true,
     })
   } catch (e) {
     log.debug(e)
     return false
   }
-  if (publishedVersionsInfo) {
-    const publishedVersions: string[] = publishedVersionsInfo.data
-    const type: string = publishedVersionsInfo.type
-    if (type && type === 'inspect') {
-      const pkgVersion = PackagePath.fromString(pkg.toString()).version
-      if (publishedVersions && pkgVersion) {
-        return publishedVersions.includes(pkgVersion)
-      } else {
-        return true
-      }
-    }
+
+  if (publishedVersions) {
+    const pkgVersion = PackagePath.fromString(pkg.toString()).version
+    return publishedVersions && pkgVersion
+      ? publishedVersions.includes(pkgVersion)
+      : true
   }
+
   return false
 }
 
@@ -143,31 +135,28 @@ export function getDefaultPackageNameForModule(
 }
 
 export async function isDependencyApiOrApiImpl(
-  dependencyName: string
+  dependency: PackagePath
 ): Promise<boolean> {
-  const isApi = await isDependencyApi(dependencyName)
-  const isApiImpl = !isApi ? await isDependencyApiImpl(dependencyName) : false
+  const isApi = await isDependencyApi(dependency)
+  const isApiImpl = !isApi ? await isDependencyApiImpl(dependency) : false
   // Note: using constants as using await in return statement was not satisfying standard checks
   return isApi || isApiImpl
 }
 
 export async function isDependencyApi(
-  dependencyName: string
+  dependency: PackagePath
 ): Promise<boolean> {
-  // for api generated using default name minimize the await time
-  if (/^.*react-native-.+-api$/.test(dependencyName)) {
+  const pkgName = await getPackageName(dependency)
+
+  if (/^.*react-native-.+-api$/.test(pkgName)) {
     return true
   }
 
-  const depInfo = await yarn.info(PackagePath.fromString(dependencyName), {
-    field: 'ern 2> /dev/null',
-    json: true,
+  const depInfo = await yarn.info(dependency, {
+    field: 'ern',
   })
-  if (depInfo && depInfo.type === 'error') {
-    throw new Error(`Cannot find ${dependencyName} in npm registry`)
-  }
 
-  return depInfo.data && ModuleType.API === depInfo.data.moduleType
+  return ModuleType.API === depInfo?.moduleType
 }
 
 /**
@@ -178,19 +167,13 @@ export async function isDependencyApi(
  * @returns {Promise.<boolean>}
  */
 export async function isDependencyApiImpl(
-  dependencyName: string | PackagePath,
+  dependency: PackagePath,
   forceYanInfo?: boolean,
   type?: string
 ): Promise<boolean> {
-  if (dependencyName instanceof PackagePath) {
-    dependencyName = dependencyName.toString()
-  }
-  // for api-impl generated using default name minimize the await time
-  if (
-    !type &&
-    !forceYanInfo &&
-    /^.*react-native-.+-api-impl$/.test(dependencyName)
-  ) {
+  const pkgName = await getPackageName(dependency)
+
+  if (!type && !forceYanInfo && /^.*react-native-.+-api-impl$/.test(pkgName)) {
     return true
   }
 
@@ -198,25 +181,30 @@ export async function isDependencyApiImpl(
     ? [type]
     : [ModuleType.NATIVE_API_IMPL, ModuleType.JS_API_IMPL]
 
-  const depInfo = await yarn.info(PackagePath.fromString(dependencyName), {
-    field: 'ern 2> /dev/null',
-    json: true,
+  const depInfo = await yarn.info(dependency, {
+    field: 'ern',
   })
-  if (depInfo && depInfo.type === 'error') {
-    throw new Error(`Cannot find ${dependencyName} in npm registry`)
-  }
 
-  return depInfo.data && modulesTypes.indexOf(depInfo.data.moduleType) > -1
+  return modulesTypes.indexOf(depInfo?.moduleType) > -1
+}
+
+export async function getPackageName(pkg: PackagePath) {
+  if (pkg.isGitPath) {
+    throw new Error(
+      'getPackageName does not support git based package path yet'
+    )
+  }
+  return pkg.name!
 }
 
 export async function isDependencyJsApiImpl(
-  dependency: string | PackagePath
+  dependency: PackagePath
 ): Promise<boolean> {
   return isDependencyApiImpl(dependency, true, ModuleType.JS_API_IMPL)
 }
 
 export async function isDependencyNativeApiImpl(
-  dependency: string | PackagePath
+  dependency: PackagePath
 ): Promise<boolean> {
   return isDependencyApiImpl(dependency, true, ModuleType.NATIVE_API_IMPL)
 }
@@ -230,9 +218,7 @@ export async function isDependencyPathApiImpl(
     : [ModuleType.NATIVE_API_IMPL, ModuleType.JS_API_IMPL]
 
   const packageJson = await readPackageJson(dependencyPath)
-  return (
-    packageJson.ern && modulesTypes.indexOf(packageJson.ern.moduleType) > -1
-  )
+  return modulesTypes.indexOf(packageJson.ern?.moduleType) > -1
 }
 
 export async function isDependencyPathJsApiImpl(
@@ -446,7 +432,7 @@ export async function getCommitShaOfGitBranchOrTag(
   }
   const result = await gitCli().listRemote([p.basePath, p.version])
   if (!result || result === '') {
-    throw new Error(`${p.version} branch or tag not found`)
+    throw new Error(`${p.version} branch or tag not found in ${p.basePath}`)
   }
   return result.substring(0, gitShaLength)
 }

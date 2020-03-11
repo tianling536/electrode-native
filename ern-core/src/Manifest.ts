@@ -3,9 +3,10 @@ import shell from './shell'
 import path from 'path'
 import Platform from './Platform'
 import GitManifest from './GitManifest'
+import { LocalManifest } from './LocalManifest'
 import Mustache from 'mustache'
 import _ from 'lodash'
-import fs from 'fs'
+import fs from 'fs-extra'
 import { isDependencyApi, isDependencyApiImpl } from './utils'
 import config from './config'
 import log from './log'
@@ -166,6 +167,10 @@ export interface IosPluginConfig extends CommonPluginConfig {
    * Set specific build settings in the plugin pbxproj
    */
   setBuildSettings?: IosPluginSetBuildSettingsDirective[]
+  /**
+   * Array of public headers to add to the container
+   */
+  containerPublicHeader?: string[]
 }
 
 /**
@@ -377,11 +382,11 @@ const ERN_MANIFEST_MASTER_GIT_REPO = `https://github.com/electrode-io/electrode-
 export class Manifest {
   public static getOverrideManifestConfig: () => Promise<ManifestOverrideConfig | void>
 
-  public readonly masterManifest: GitManifest
+  public readonly masterManifest: LocalManifest | GitManifest
   private manifestOverrideType: 'partial' | 'full'
-  private overrideManifest: GitManifest
+  private overrideManifest: LocalManifest | GitManifest
 
-  constructor(masterManifest: GitManifest) {
+  constructor(masterManifest: LocalManifest | GitManifest) {
     this.masterManifest = masterManifest
   }
 
@@ -393,8 +398,8 @@ export class Manifest {
           overrideManifestConfig.url
         )
         this.manifestOverrideType = overrideManifestConfig.type
-        if (fs.existsSync(manifestOverrideUrl)) {
-          this.overrideManifest = new GitManifest(manifestOverrideUrl)
+        if (await fs.pathExists(manifestOverrideUrl)) {
+          this.overrideManifest = new LocalManifest(manifestOverrideUrl)
         } else {
           this.overrideManifest = new GitManifest(
             Platform.overrideManifestDirectory,
@@ -461,13 +466,13 @@ export class Manifest {
           ? overrideManifestData.targetNativeDependencies
           : [],
         masterManifestData ? masterManifestData.targetNativeDependencies : [],
-        d => PackagePath.fromString(<string>d).basePath
+        d => PackagePath.fromString(<string>d).name
       )
 
       manifestData.targetJsDependencies = _.unionBy(
         overrideManifestData ? overrideManifestData.targetJsDependencies : [],
         masterManifestData ? masterManifestData.targetJsDependencies : [],
-        d => PackagePath.fromString(<string>d).basePath
+        d => PackagePath.fromString(<string>d).name
       )
     } else if (this.overrideManifest && this.manifestOverrideType === 'full') {
       manifestData = await this.overrideManifest.getManifestData({
@@ -523,7 +528,7 @@ export class Manifest {
       manifestId,
       platformVersion,
     })
-    return _.find(nativeDependencies, d => d.basePath === dependency.basePath)
+    return _.find(nativeDependencies, d => d.name === dependency.name)
   }
 
   public async getJsDependency(
@@ -540,7 +545,7 @@ export class Manifest {
       manifestId,
       platformVersion,
     })
-    return _.find(jsDependencies, d => d.basePath === dependency.basePath)
+    return _.find(jsDependencies, d => d.name === dependency.name)
   }
 
   public async getJsAndNativeDependencies({
@@ -609,14 +614,12 @@ export class Manifest {
     )
     if (!pluginConfigPath) {
       throw new Error(
-        `There is no configuration for ${
-          plugin.basePath
-        } plugin in Manifest matching platform version ${platformVersion}`
+        `There is no configuration for ${plugin.name} plugin in Manifest matching platform version ${platformVersion}`
       )
     }
 
     let result: PluginConfig
-    let configFile = fs.readFileSync(
+    let configFile = await fs.readFile(
       path.join(pluginConfigPath, pluginConfigFileName),
       'utf-8'
     )
@@ -625,13 +628,13 @@ export class Manifest {
 
     // Add default value (convention) for Android subsection for missing fields
     if (result.android) {
-      if (result.android.root === undefined) {
-        result.android.root = 'android'
-      }
+      result.android.root = result.android.root ?? 'android'
 
-      const matchedFiles = shell.find(pluginConfigPath).filter(file => {
-        return file.match(/\.java$/)
-      })
+      const matchedFiles = shell
+        .find(pluginConfigPath)
+        .filter((file: string) => {
+          return file.match(/\.java$/)
+        })
       if (matchedFiles && matchedFiles.length === 1) {
         const pluginHookClass = path.basename(matchedFiles[0], '.java')
         result.android.pluginHook = {
@@ -649,16 +652,18 @@ export class Manifest {
     }
 
     if (result.ios) {
-      if (result.ios.root === undefined) {
-        result.ios.root = 'ios'
-      }
+      result.ios.root = result.ios.root ?? 'ios'
 
-      const matchedHeaderFiles = shell.find(pluginConfigPath).filter(file => {
-        return file.match(/\.h$/)
-      })
-      const matchedSourceFiles = shell.find(pluginConfigPath).filter(file => {
-        return file.match(/\.m$/)
-      })
+      const matchedHeaderFiles = shell
+        .find(pluginConfigPath)
+        .filter((file: string) => {
+          return file.match(/\.h$/)
+        })
+      const matchedSourceFiles = shell
+        .find(pluginConfigPath)
+        .filter((file: string) => {
+          return file.match(/\.m$/)
+        })
 
       if (
         matchedHeaderFiles &&
@@ -678,16 +683,16 @@ export class Manifest {
   }
 
   public getDefaultNpmPluginOrigin(plugin: PackagePath): NpmPluginOrigin {
-    if (npmScopeModuleRe.test(plugin.basePath)) {
+    if (npmScopeModuleRe.test(plugin.name!)) {
       return {
-        name: `${npmScopeModuleRe.exec(plugin.basePath)![2]}`,
-        scope: `${npmScopeModuleRe.exec(plugin.basePath)![1]}`,
+        name: `${npmScopeModuleRe.exec(plugin.name!)![2]}`,
+        scope: `${npmScopeModuleRe.exec(plugin.name!)![1]}`,
         type: 'npm',
         version: plugin.version,
       }
     } else {
       return {
-        name: plugin.basePath,
+        name: plugin.name!,
         type: 'npm',
         version: plugin.version,
       }
@@ -698,15 +703,15 @@ export class Manifest {
     plugin: PackagePath,
     projectName: string = 'ElectrodeContainer',
     platformVersion: string = Platform.currentVersion
-  ): Promise<PluginConfig | void> {
+  ): Promise<PluginConfig | undefined> {
     await this.initOverrideManifest()
     let result
-    if (await isDependencyApi(plugin.basePath)) {
+    if (await isDependencyApi(plugin)) {
       log.debug(
         'API plugin detected. Retrieving API plugin default configuration'
       )
       result = this.getApiPluginDefaultConfig(plugin, projectName)
-    } else if (await isDependencyApiImpl(plugin.basePath)) {
+    } else if (await isDependencyApiImpl(plugin)) {
       log.debug(
         'APIImpl plugin detected. Retrieving APIImpl plugin default configuration'
       )
@@ -722,9 +727,7 @@ export class Manifest {
       )
     } else {
       log.warn(
-        `Unsupported plugin. No configuration found in manifest for ${
-          plugin.basePath
-        }.`
+        `Unsupported plugin. No configuration found in manifest for ${plugin.name}.`
       )
       return
       /*throw new Error(
@@ -814,9 +817,13 @@ export class Manifest {
   }
 }
 
-export const manifest = new Manifest(
-  new GitManifest(
-    Platform.masterManifestDirectory,
-    ERN_MANIFEST_MASTER_GIT_REPO
-  )
-)
+const manifestLocalConfig = config.get('manifest', {})
+const manifestLocalMasterUrl = manifestLocalConfig?.master?.url
+export const manifest = manifestLocalMasterUrl
+  ? new Manifest(new LocalManifest(manifestLocalMasterUrl))
+  : new Manifest(
+      new GitManifest(
+        Platform.masterManifestDirectory,
+        ERN_MANIFEST_MASTER_GIT_REPO
+      )
+    )

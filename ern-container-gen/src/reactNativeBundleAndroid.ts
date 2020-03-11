@@ -8,26 +8,28 @@ export async function reactNativeBundleAndroid({
   outDir,
   sourceMapOutput,
   cwd,
+  resetCache,
 }: {
   bundleOutput?: string
   dev?: boolean
   outDir: string
   sourceMapOutput?: string
   cwd?: string
+  resetCache?: boolean
 }): Promise<BundlingResult> {
-  cwd = cwd || process.cwd()
+  cwd = cwd ?? process.cwd()
   const libSrcMainPath = path.join(outDir, 'lib', 'src', 'main')
   bundleOutput =
-    bundleOutput || path.join(libSrcMainPath, 'assets', 'index.android.bundle')
+    bundleOutput ?? path.join(libSrcMainPath, 'assets', 'index.android.bundle')
   const assetsDest = path.join(libSrcMainPath, 'res')
   // Cleanup everything from 'res' directory but 'devassist'
   if (fs.existsSync(assetsDest)) {
     fs.readdirSync(assetsDest)
-    .filter(p => p !== 'devassist')
-    .map(p => path.join(assetsDest, p))
-    .forEach(p => shell.rm('-rf', p))
+      .filter(p => p !== 'devassist')
+      .map(p => path.join(assetsDest, p))
+      .forEach(p => shell.rm('-rf', p))
   }
-  
+
   shell.pushd(cwd)
 
   const entryFile = fs.existsSync(path.join(cwd, 'index.android.js'))
@@ -41,6 +43,7 @@ export async function reactNativeBundleAndroid({
       dev: !!dev,
       entryFile,
       platform: 'android',
+      resetCache,
       sourceMapOutput,
     })
     return result

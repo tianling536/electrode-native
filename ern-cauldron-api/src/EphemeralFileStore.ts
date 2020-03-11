@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import { ICauldronFileStore } from './types'
 import { createTmpDir } from 'ern-core'
@@ -29,10 +29,8 @@ export default class EphemeralFileStore implements ICauldronFileStore {
   ) {
     const pathToFile = path.join(this.storePath, identifier)
     const pathToDir = path.dirname(pathToFile)
-    if (!fs.existsSync(pathToDir)) {
-      shell.mkdir('-p', pathToDir)
-    }
-    fs.writeFileSync(pathToFile, content, 'utf8')
+    await fs.ensureDir(pathToDir)
+    await fs.writeFile(pathToFile, content, 'utf8')
     if (fileMode) {
       shell.chmod(fileMode, pathToFile)
     }
@@ -48,22 +46,22 @@ export default class EphemeralFileStore implements ICauldronFileStore {
     }
   }
 
-  public async getPathToFile(filename: string): Promise<string | void> {
-    if (fs.existsSync(this.getpathToFile(filename))) {
+  public async getPathToFile(filename: string): Promise<string | undefined> {
+    if (await fs.pathExists(this.getpathToFile(filename))) {
       return this.getpathToFile(filename)
     }
   }
 
-  public async getFile(filename: string): Promise<Buffer | void> {
-    if (fs.existsSync(this.getpathToFile(filename))) {
+  public async getFile(filename: string): Promise<Buffer | undefined> {
+    if (await fs.pathExists(this.getpathToFile(filename))) {
       return fs.readFileSync(this.getpathToFile(filename))
     }
   }
 
   public async removeFile(filename: string): Promise<boolean> {
     const pathToFile = this.getpathToFile(filename)
-    if (fs.existsSync(pathToFile)) {
-      fs.unlinkSync(pathToFile)
+    if (await fs.pathExists(pathToFile)) {
+      await fs.unlink(pathToFile)
       if (!this.transactionPending) {
         this.latestCommitMessage = `[removed file] ${filename}`
       }

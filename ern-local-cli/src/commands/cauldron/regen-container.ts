@@ -32,6 +32,12 @@ export const builder = (argv: Argv) => {
       describe: 'Perform complete regeneration',
       type: 'boolean',
     })
+    .option('resetCache', {
+      default: false,
+      describe:
+        'Indicates whether to reset the React Native cache prior to bundling',
+      type: 'boolean',
+    })
     .option('sourceMapOutput', {
       describe: 'Path to source map file to generate for this container bundle',
       type: 'string',
@@ -44,11 +50,13 @@ export const commandHandler = async ({
   containerVersion,
   descriptor,
   fullRegen,
+  resetCache,
   sourceMapOutput,
 }: {
   containerVersion?: string
   descriptor?: AppVersionDescriptor
   fullRegen?: boolean
+  resetCache?: boolean
   sourceMapOutput?: string
 }) => {
   descriptor =
@@ -65,9 +73,6 @@ export const commandHandler = async ({
           extraErrorMessage:
             'To avoid conflicts with previous versions, you can only use container version newer than the current one',
         }
-      : undefined,
-    isValidContainerVersion: containerVersion
-      ? { containerVersion }
       : undefined,
     napDescriptorExistInCauldron: {
       descriptor,
@@ -107,6 +112,7 @@ export const commandHandler = async ({
     `Regenerate Container of ${descriptor} native application`,
     {
       containerVersion,
+      resetCache,
       sourceMapOutput,
     }
   )

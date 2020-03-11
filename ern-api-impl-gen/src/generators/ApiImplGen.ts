@@ -34,7 +34,7 @@ export default class ApiImplGen {
     const schemaJson = path.join(
       paths.outDirectory,
       'node_modules',
-      apiPackagePath.basePath,
+      apiPackagePath.name!,
       'schema.json'
     )
 
@@ -47,8 +47,7 @@ export default class ApiImplGen {
     const reactNativeElectrodeBridge: any = await readPackageJson(
       path.join(
         paths.outDirectory,
-        'node_modules',
-        'react-native-electrode-bridge'
+        'node_modules/react-native-electrode-bridge'
       )
     )
 
@@ -64,9 +63,7 @@ export default class ApiImplGen {
               apiPackagePath,
               PackagePath.fromString(`react-native@${reactNativeVersion}`),
               PackagePath.fromString(
-                `react-native-electrode-bridge@${
-                  reactNativeElectrodeBridge.version
-                }`
+                `react-native-electrode-bridge@${reactNativeElectrodeBridge.version}`
               ),
             ],
             apis,
@@ -80,9 +77,7 @@ export default class ApiImplGen {
 
     log.info(
       chalk.green(
-        `API implementation project was successfully generated in ${
-          paths.outDirectory
-        }`
+        `API implementation project was successfully generated in ${paths.outDirectory}`
       )
     )
   }
@@ -92,23 +87,20 @@ export default class ApiImplGen {
   ): Promise<PackagePath[]> {
     try {
       log.info('Looking for peerDependencies')
-      const apiPackageInfo = await yarn.info(apiPackagePath, { json: true })
+      const { dependencies, peerDependencies } = await yarn.info(apiPackagePath)
 
-      const pluginsNames = []
+      const pluginsNames: string[] = []
 
-      if (apiPackageInfo.data.peerDependencies) {
-        this.pushDependencyNames(
-          apiPackageInfo.data.peerDependencies,
-          pluginsNames
-        )
+      if (peerDependencies) {
+        this.pushDependencyNames(peerDependencies, pluginsNames)
       }
 
-      if (apiPackageInfo.data.dependencies) {
-        this.pushDependencyNames(apiPackageInfo.data.dependencies, pluginsNames)
+      if (dependencies) {
+        this.pushDependencyNames(dependencies, pluginsNames)
       }
 
       if (pluginsNames.length === 0) {
-        log.info(`no other dependencies found for ${apiPackagePath.basePath}`)
+        log.info(`no other dependencies found for ${apiPackagePath.name}`)
       }
 
       return _.map(pluginsNames, PackagePath.fromString)

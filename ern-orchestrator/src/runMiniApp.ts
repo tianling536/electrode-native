@@ -20,7 +20,7 @@ import { RunnerGeneratorConfig } from 'ern-runner-gen'
 import { getRunnerGeneratorForPlatform } from './getRunnerGeneratorForPlatform'
 import { generateContainerForRunner } from './generateContainerForRunner'
 import { launchRunner } from './launchRunner'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import _ from 'lodash'
 import { LaunchRunnerConfig } from 'ern-runner-gen/src/types/LaunchRunnerConfig'
@@ -57,9 +57,9 @@ export async function runMiniApp(
     port?: string
   } = {}
 ) {
-  cwd = cwd || process.cwd()
+  cwd = cwd ?? process.cwd()
 
-  let napDescriptor: AppVersionDescriptor | void
+  let napDescriptor: AppVersionDescriptor | undefined
 
   if (miniapps && !MiniApp.existInPath(cwd) && !mainMiniAppName) {
     throw new Error(
@@ -69,7 +69,9 @@ export async function runMiniApp(
 
   let jsMainModuleName
   if (MiniApp.existInPath(cwd)) {
-    jsMainModuleName = fs.existsSync(path.join(cwd, `index.${platform}.js`))
+    jsMainModuleName = (await fs.pathExists(
+      path.join(cwd, `index.${platform}.js`)
+    ))
       ? `index.${platform}`
       : 'index'
   }
@@ -111,9 +113,7 @@ export async function runMiniApp(
         `This command is being run from the ${miniapp.name} MiniApp directory.`
       )
       log.info(
-        `All extra MiniApps will be included in the Runner container along with ${
-          miniapp.name
-        }`
+        `All extra MiniApps will be included in the Runner container along with ${miniapp.name}`
       )
       if (!mainMiniAppName) {
         log.info(`${miniapp.name} will be set as the main MiniApp`)
@@ -203,7 +203,7 @@ export async function runMiniApp(
   const compositeNativeDeps = await containerGenResult.config.composite.getNativeDependencies()
   const reactNativeDep = _.find(
     compositeNativeDeps.all,
-    p => p.packagePath.basePath === 'react-native'
+    p => p.name === 'react-native'
   )
 
   const hasErnNavigation =
@@ -213,7 +213,7 @@ export async function runMiniApp(
 
   const runnerGeneratorConfig: RunnerGeneratorConfig = {
     extra: {
-      androidConfig: (extra && extra.androidConfig) || {},
+      androidConfig: extra?.androidConfig ?? {},
       containerGenWorkingDir: Platform.containerGenDirectory,
     },
     mainMiniAppName: entryMiniAppName,
@@ -221,11 +221,11 @@ export async function runMiniApp(
     reactNativeDevSupportEnabled: dev,
     reactNativePackagerHost: host,
     reactNativePackagerPort: port,
-    reactNativeVersion: reactNativeDep!.packagePath.version!,
+    reactNativeVersion: reactNativeDep!.version!,
     targetPlatform: platform,
   }
 
-  if (!fs.existsSync(pathToRunner)) {
+  if (!(await fs.pathExists(pathToRunner))) {
     shell.mkdir('-p', pathToRunner)
     await kax
       .task(`Generating ${platform} Runner project`)
@@ -247,7 +247,7 @@ export async function runMiniApp(
       pathToRunner,
       'app/src/main/java/com/walmartlabs/ern/RunnerConfig.java'
     )
-    return fs.existsSync(paths)
+    return fs.pathExistsSync(paths)
   }
 
   const launchRunnerConfig: LaunchRunnerConfig = {

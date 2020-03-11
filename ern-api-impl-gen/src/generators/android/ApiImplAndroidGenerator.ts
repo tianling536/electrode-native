@@ -9,21 +9,19 @@ import {
   PluginConfig,
   android,
 } from 'ern-core'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import readDir from 'fs-readdir-recursive'
 import { ApiImplGeneratable } from '../../ApiImplGeneratable'
 
 export const ROOT_DIR = shell.pwd()
-const READ_EXECUTE = '555'
-const READ_WRITE_EXECUTE = '777'
-const SRC_MAIN_JAVA_DIR = path.join('src', 'main', 'java')
-const API_IMPL_PACKAGE = path.join('com', 'ern', 'api', 'impl')
+const SRC_MAIN_JAVA_DIR = path.normalize('src/main/java')
+const API_IMPL_PACKAGE = path.normalize('com/ern/api/impl')
 
 export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
-  public static getMustacheFileNamesMap(resourceDir, apiName) {
+  public static getMustacheFileNamesMap(resourceDir: string, apiName: string) {
     const files = readDir(resourceDir, f => f.endsWith('.mustache'))
-    const classNames = {
+    const classNames: { [k: string]: string } = {
       'apiController.mustache': `${apiName}ApiController.java`,
       'requestHandlerProvider.mustache': `${apiName}ApiRequestHandlerProvider.java`,
       'requestHandlers.mustache': `${apiName}ApiRequestHandler.java`,
@@ -31,23 +29,19 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
     return { files, classNames }
   }
 
-  public static createImplDirectoryAndCopyCommonClasses(paths) {
+  public static createImplDirectoryAndCopyCommonClasses(paths: any) {
     const outputDir = path.join(
       paths.outDirectory,
-      'android',
-      'lib',
+      'android/lib',
       SRC_MAIN_JAVA_DIR,
       API_IMPL_PACKAGE
     )
-    if (!fs.existsSync(outputDir)) {
-      shell.mkdir('-p', outputDir)
-    }
+
+    fs.ensureDirSync(outputDir)
 
     const resourceDir = path.join(
       Platform.currentPlatformVersionPath,
-      'ern-api-impl-gen',
-      'resources',
-      'android'
+      'ern-api-impl-gen/resources/android'
     )
     shell.cp(path.join(resourceDir, 'RequestHandlerConfig.java'), outputDir)
     shell.cp(path.join(resourceDir, 'RequestHandlerProvider.java'), outputDir)
@@ -95,14 +89,13 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
       log.debug(
         `Creating out directory(${outputDirectory}) for android and copying container hull to it.`
       )
-      if (!fs.existsSync(outputDirectory)) {
-        shell.mkdir(outputDirectory)
-      }
 
-      fileUtils.chmodr(READ_WRITE_EXECUTE, outputDirectory)
+      fs.ensureDirSync(outputDirectory)
+
+      fileUtils.chmodr('755', outputDirectory)
       shell.cp(
         '-Rf',
-        path.join(paths.apiImplHull, 'android', '{.*,*}'),
+        path.join(paths.apiImplHull, 'android/{.*,*}'),
         outputDirectory
       )
 
@@ -115,7 +108,7 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
       for (pluginPath of pluginsPaths) {
         const pluginConfig = await manifest.getPluginConfig(pluginPath)
         if (pluginConfig) {
-          log.debug(`Copying ${pluginPath.basePath} to ${outputDirectory}`)
+          log.debug(`Copying ${pluginPath.name} to ${outputDirectory}`)
           this.copyPluginToOutput(
             paths,
             srcOutputDirectory,
@@ -142,44 +135,29 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
     pluginPath: PackagePath,
     pluginConfig: PluginConfig
   ) {
-    if (pluginPath.basePath === 'react-native') {
+    if (pluginPath.name === 'react-native') {
       return
     }
     if (!pluginConfig.android) {
       throw new Error('Missing android plugin configuration')
     }
-    log.debug(`injecting ${pluginPath.basePath} code.`)
+    log.debug(`injecting ${pluginPath.name} code.`)
     const pluginSrcDirectory = path.join(
       paths.outDirectory,
       'node_modules',
-      pluginPath.basePath,
+      pluginPath.name!,
       'android',
       pluginConfig.android.moduleName,
       SRC_MAIN_JAVA_DIR,
       '*'
     )
-    if (!fs.existsSync(pluginOutputDirectory)) {
-      shell.mkdir('-p', pluginOutputDirectory)
-    }
+
+    fs.ensureDirSync(pluginOutputDirectory)
+
     log.debug(
       `Copying code from ${pluginSrcDirectory} to ${pluginOutputDirectory}`
     )
     shell.cp('-Rf', pluginSrcDirectory, pluginOutputDirectory)
-  }
-
-  public async updateFilePermissions(
-    srcOutputDirectory: string,
-    editableFiles: string[]
-  ) {
-    log.debug('Updating file permissions')
-    const files = shell
-      .find(srcOutputDirectory)
-      .filter(file => file.endsWith('.java'))
-    for (const file of files) {
-      editableFiles.includes(file)
-        ? fileUtils.chmodr(READ_WRITE_EXECUTE, file)
-        : fileUtils.chmodr(READ_EXECUTE, file)
-    }
   }
 
   public updateBuildGradle(
@@ -194,14 +172,14 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
     mustacheView.reactNativeVersion = reactNativeVersion
     mustacheView = Object.assign(mustacheView, versions)
     mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
-      path.join(paths.apiImplHull, 'android', 'build.gradle'),
+      path.join(paths.apiImplHull, 'android/build.gradle'),
       mustacheView,
       path.join(outputDirectory, 'build.gradle')
     )
     return mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
-      path.join(paths.apiImplHull, 'android', 'lib', 'build.gradle'),
+      path.join(paths.apiImplHull, 'android/lib/build.gradle'),
       mustacheView,
-      path.join(outputDirectory, 'lib', 'build.gradle')
+      path.join(outputDirectory, 'lib/build.gradle')
     )
   }
 
@@ -215,18 +193,10 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
     return mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
       path.join(
         paths.apiImplHull,
-        'android',
-        'gradle',
-        'wrapper',
-        'gradle-wrapper.properties'
+        'android/gradle/wrapper/gradle-wrapper.properties'
       ),
       mustacheView,
-      path.join(
-        outputDirectory,
-        'gradle',
-        'wrapper',
-        'gradle-wrapper.properties'
-      )
+      path.join(outputDirectory, 'gradle/wrapper/gradle-wrapper.properties')
     )
   }
 
@@ -275,9 +245,7 @@ export default class ApiImplAndroidGenerator implements ApiImplGeneratable {
           )
         }
         log.debug(
-          `Api implementation files successfully generated for ${
-            api.apiName
-          }Api`
+          `Api implementation files successfully generated for ${api.apiName}Api`
         )
       }
       return editableFiles

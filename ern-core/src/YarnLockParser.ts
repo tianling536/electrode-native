@@ -1,5 +1,5 @@
 import * as lockfile from '@yarnpkg/lockfile'
-import fs from 'fs'
+import fs from 'fs-extra'
 import { PackagePath } from './PackagePath'
 
 export interface PackagePathWithResolvedVersion {
@@ -13,8 +13,8 @@ export class YarnLockParser {
    * path to a yarn.lock file
    * @param yarnLockPath Path the to a yarn.lock file
    */
-  public static fromPath(yarnLockPath: fs.PathLike) {
-    if (!fs.existsSync(yarnLockPath)) {
+  public static fromPath(yarnLockPath: string) {
+    if (!fs.pathExistsSync(yarnLockPath)) {
       throw new Error(`Path to yarn.lock ${yarnLockPath} does not exist`)
     }
     return new YarnLockParser(fs.readFileSync(yarnLockPath, 'utf8'))
@@ -57,13 +57,13 @@ export class YarnLockParser {
           .filter(k => k === pkg.fullPath)
           .map(k => ({
             pkgPath: PackagePath.fromString(k),
-            version: this.parsed.object[k] && this.parsed.object[k].version,
+            version: this.parsed.object[k]?.version,
           }))
       : Object.keys(this.parsed.object)
           .filter(k => k.startsWith(`${pkg.basePath}@`))
           .map(k => ({
             pkgPath: PackagePath.fromString(k),
-            version: this.parsed.object[k] && this.parsed.object[k].version,
+            version: this.parsed.object[k]?.version,
           }))
   }
 
@@ -86,7 +86,7 @@ export class YarnLockParser {
       )
       .map(([k, v]: [string, any]) => ({
         pkgPath: PackagePath.fromString(k),
-        version: this.parsed.object[k] && this.parsed.object[k].version,
+        version: this.parsed.object[k]?.version,
       }))
   }
 

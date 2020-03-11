@@ -84,16 +84,7 @@ describe('utils.js', () => {
 
     it('pkgName not published in npm return false', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(yarnInfoError)
-      expect(await utils.isPublishedToNpm(fixtures.pkgNameUnpublished)).to.eql(
-        false
-      )
-      yarnStub.restore()
-    })
-
-    it('yarn info returns error return false', async () => {
-      const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(new Error('fake error'))
+      yarnStub.rejects(new Error('Received invalid response from npm.'))
       expect(await utils.isPublishedToNpm(fixtures.pkgNameUnpublished)).to.eql(
         false
       )
@@ -488,28 +479,27 @@ describe('utils.js', () => {
   describe('isDependencyApiImpl', () => {
     it('return true if regex matches', async () => {
       expect(
-        await utils.isDependencyApiImpl('react-native-header-api-impl')
+        await utils.isDependencyApiImpl(
+          PackagePath.fromString('react-native-header-api-impl')
+        )
       ).to.eql(true)
     })
 
     it('return true if ern object resolves for native api impl', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnApiImpl)
-      expect(await utils.isDependencyApiImpl('react-header')).to.eql(true)
+      expect(
+        await utils.isDependencyApiImpl(PackagePath.fromString('react-header'))
+      ).to.eql(true)
       yarnStub.restore()
     })
 
     it('return true if ern object resolves for js api impl', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnJsApiImpl)
-      expect(await utils.isDependencyApiImpl('react-header')).to.eql(true)
-      yarnStub.restore()
-    })
-
-    it('throw if yarn info errors', async () => {
-      const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(yarnInfoError)
-      assert(await doesThrow(isDependencyApiImpl, null, 'react-header'))
+      expect(
+        await utils.isDependencyApiImpl(PackagePath.fromString('react-header'))
+      ).to.eql(true)
       yarnStub.restore()
     })
   })
@@ -519,22 +509,19 @@ describe('utils.js', () => {
   // ==========================================================
   describe('isDependencyApi', () => {
     it('return true if regex matches', async () => {
-      expect(await utils.isDependencyApi('react-native-header-api')).to.eql(
-        true
-      )
+      expect(
+        await utils.isDependencyApi(
+          PackagePath.fromString('react-native-header-api')
+        )
+      ).to.eql(true)
     })
 
     it('return true if ern object resolves for api', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnApi)
-      expect(await utils.isDependencyApi('react-header')).to.eql(true)
-      yarnStub.restore()
-    })
-
-    it('throw if yarn info errors', async () => {
-      const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(yarnInfoError)
-      assert(await doesThrow(isDependencyApi, null, 'react-header'))
+      expect(
+        await utils.isDependencyApi(PackagePath.fromString('react-header'))
+      ).to.eql(true)
       yarnStub.restore()
     })
   })
@@ -545,21 +532,20 @@ describe('utils.js', () => {
   describe('isDependencyApiOrApiImpl', () => {
     it('return true if regex matches', async () => {
       expect(
-        await utils.isDependencyApiOrApiImpl('react-native-header-api')
+        await utils.isDependencyApiOrApiImpl(
+          PackagePath.fromString('react-native-header-api')
+        )
       ).to.eql(true)
     })
 
     it('return true if ern object resolves for api', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnApi)
-      expect(await utils.isDependencyApiOrApiImpl('react-header')).to.eql(true)
-      yarnStub.restore()
-    })
-
-    it('throw if yarn info errors', async () => {
-      const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(yarnInfoError)
-      assert(await doesThrow(isDependencyApiOrApiImpl, null, 'react-header'))
+      expect(
+        await utils.isDependencyApiOrApiImpl(
+          PackagePath.fromString('react-header')
+        )
+      ).to.eql(true)
       yarnStub.restore()
     })
 
@@ -567,7 +553,9 @@ describe('utils.js', () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnApi)
       expect(
-        await utils.isDependencyApiOrApiImpl('react-native-header-api-impl')
+        await utils.isDependencyApiOrApiImpl(
+          PackagePath.fromString('react-native-header-api-impl')
+        )
       ).to.eql(true)
       yarnStub.restore()
     })
@@ -575,21 +563,22 @@ describe('utils.js', () => {
     it('return true if ern object resolves for native api impl', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnApiImpl)
-      expect(await utils.isDependencyApiOrApiImpl('react-header')).to.eql(true)
+      expect(
+        await utils.isDependencyApiOrApiImpl(
+          PackagePath.fromString('react-header')
+        )
+      ).to.eql(true)
       yarnStub.restore()
     })
 
     it('return true if ern object resolves for js api impl', async () => {
       const yarnStub = sinon.stub(yarn, 'info')
       yarnStub.resolves(yarnInfoErnJsApiImpl)
-      expect(await utils.isDependencyApiOrApiImpl('react-header')).to.eql(true)
-      yarnStub.restore()
-    })
-
-    it('throw if yarn info errors', async () => {
-      const yarnStub = sinon.stub(yarn, 'info')
-      yarnStub.resolves(yarnInfoError)
-      assert(await doesThrow(isDependencyApiOrApiImpl, null, 'react-header'))
+      expect(
+        await utils.isDependencyApiOrApiImpl(
+          PackagePath.fromString('react-header')
+        )
+      ).to.eql(true)
       yarnStub.restore()
     })
   })

@@ -1,5 +1,5 @@
 import { BundlingResult, reactnative, shell } from 'ern-core'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 
 export async function reactNativeBundleIos({
@@ -8,12 +8,14 @@ export async function reactNativeBundleIos({
   outDir,
   sourceMapOutput,
   cwd,
+  resetCache,
 }: {
   bundleOutput?: string
   dev?: boolean
   outDir: string
   sourceMapOutput?: string
   cwd?: string
+  resetCache?: boolean
 }): Promise<BundlingResult> {
   cwd = cwd || process.cwd()
   const miniAppOutPath = path.join(
@@ -22,7 +24,7 @@ export async function reactNativeBundleIos({
     'Libraries',
     'MiniApp'
   )
-  bundleOutput = bundleOutput || path.join(miniAppOutPath, 'MiniApp.jsbundle')
+  bundleOutput = bundleOutput ?? path.join(miniAppOutPath, 'MiniApp.jsbundle')
   const assetsDest = miniAppOutPath
   if (fs.existsSync(assetsDest)) {
     shell.rm('-rf', path.join(assetsDest, '{.*,*}'))
@@ -32,14 +34,12 @@ export async function reactNativeBundleIos({
     // which will lead to issues when building the iOS Container
     // if the assets directory is missing
     fs.writeFileSync(
-      path.join(assetsDest, 'assets', 'README.md'),
+      path.join(assetsDest, 'assets/README.md'),
       'React Native bundled assets will be stored in this directory'
     )
   }
 
-  if (!fs.existsSync(miniAppOutPath)) {
-    shell.mkdir('-p', miniAppOutPath)
-  }
+  await fs.ensureDir(miniAppOutPath)
 
   shell.pushd(cwd)
 
@@ -54,6 +54,7 @@ export async function reactNativeBundleIos({
       dev: !!dev,
       entryFile,
       platform: 'ios',
+      resetCache,
       sourceMapOutput,
     })
     return result

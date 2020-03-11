@@ -8,8 +8,12 @@ import {
   log,
   kax,
   SourceMapStoreSdk,
+  HermesCli,
+  android,
+  createProxyAgentFromErnConfig,
+  bugsnagUpload,
 } from 'ern-core'
-import { generateComposite } from 'ern-composite-gen'
+import { Composite } from 'ern-composite-gen'
 import {
   CauldronCodePushMetadata,
   CauldronCodePushEntry,
@@ -19,7 +23,7 @@ import * as compatibility from './compatibility'
 import _ from 'lodash'
 import path from 'path'
 import shell from 'shelljs'
-import fs from 'fs'
+import fs from 'fs-extra'
 import semver from 'semver'
 
 export async function performCodePushPatch(
@@ -225,9 +229,7 @@ export async function performCodePushPromote(
             const sdk = new SourceMapStoreSdk(sourcemapStoreConfig.url)
             await kax
               .task(
-                `Copying source map in source map store [${
-                  sourcemapStoreConfig.url
-                }]`
+                `Copying source map in source map store [${sourcemapStoreConfig.url}]`
               )
               .run(
                 sdk.copyCodePushSourceMap({
@@ -294,12 +296,11 @@ export async function performCodePushOtaUpdate(
     const compositeGenConfig = await cauldron.getCompositeGeneratorConfig(
       napDescriptor
     )
-    baseComposite =
-      baseComposite || (compositeGenConfig && compositeGenConfig.baseComposite)
+    baseComposite = baseComposite ?? compositeGenConfig?.baseComposite
     await cauldron.beginTransaction()
     const codePushPlugin = _.find(
       plugins,
-      p => p.basePath === 'react-native-code-push'
+      p => p.name === 'react-native-code-push'
     )
     if (!codePushPlugin) {
       throw new Error('react-native-code-push plugin is not in native app !')
@@ -386,8 +387,8 @@ export async function performCodePushOtaUpdate(
       )
     }
 
-    await kax.task('Generating composite module').run(
-      generateComposite({
+    const composite = await kax.task('Generating composite module').run(
+      Composite.generate({
         baseComposite,
         jsApiImplDependencies: pathToJsApiImplsToBeCodePushed,
         miniApps: pathsToMiniAppsToBeCodePushed,
@@ -406,17 +407,42 @@ export async function performCodePushOtaUpdate(
         : path.join(bundleOutputDirectory, 'MiniApp.jsbundle')
 
     sourceMapOutput = sourceMapOutput || path.join(createTmpDir(), 'index.map')
-    await kax.task('Generating composite bundle for miniapps').run(
-      reactnative.bundle({
-        assetsDest: bundleOutputDirectory,
-        bundleOutput: bundleOutputPath,
-        dev: false,
-        entryFile: `index.${platform}.js`,
-        platform,
-        sourceMapOutput,
-        workingDir: tmpWorkingDir,
-      })
-    )
+    const bundlingResult = await kax
+      .task('Generating composite bundle for miniapps')
+      .run(
+        reactnative.bundle({
+          assetsDest: bundleOutputDirectory,
+          bundleOutput: bundleOutputPath,
+          dev: false,
+          entryFile: `index.${platform}.js`,
+          platform,
+          resetCache: true,
+          sourceMapOutput,
+          workingDir: tmpWorkingDir,
+        })
+      )
+
+    if (platform === 'android') {
+      const conf = await cauldron.getContainerGeneratorConfig(napDescriptor)
+      const isHermesEnabled = conf?.androidConfig?.jsEngine === 'hermes'
+      if (isHermesEnabled) {
+        const hermesVersion =
+          conf.androidConfig.hermesVersion ?? android.DEFAULT_HERMES_VERSION
+        const hermesCli = await kax
+          .task(`Installing hermes-engine@${hermesVersion}`)
+          .run(HermesCli.fromVersion(hermesVersion))
+        const res = await kax
+          .task('Compiling JS bundle to Hermes bytecode')
+          .run(
+            hermesCli.compileReleaseBundle({
+              bundleSourceMapPath: sourceMapOutput,
+              compositePath: tmpWorkingDir,
+              jsBundlePath: bundleOutputPath,
+            })
+          )
+        bundlingResult.isHermesBundle = true
+      }
+    }
 
     const appName = await getCodePushAppName(napDescriptor)
 
@@ -461,7 +487,7 @@ export async function performCodePushOtaUpdate(
       )
 
       const pathToNewYarnLock = path.join(tmpWorkingDir, 'yarn.lock')
-      if (fs.existsSync(pathToNewYarnLock)) {
+      if (await fs.pathExists(pathToNewYarnLock)) {
         await kax
           .task('Adding yarn.lock to Cauldron')
           .run(
@@ -480,9 +506,7 @@ export async function performCodePushOtaUpdate(
           const sdk = new SourceMapStoreSdk(sourcemapStoreConfig.url)
           await kax
             .task(
-              `Uploading source map to source map store [${
-                sourcemapStoreConfig.url
-              }]`
+              `Uploading source map to source map store [${sourcemapStoreConfig.url}]`
             )
             .run(
               sdk.uploadCodePushSourceMap({
@@ -494,6 +518,33 @@ export async function performCodePushOtaUpdate(
             )
         } catch (e) {
           log.error(`Source map upload failed : ${e}`)
+        }
+      }
+
+      // Upload source map to bugsnag if configured
+      const bugsnagConfig = await cauldron.getBugsnagConfig(napDescriptor)
+      if (bugsnagConfig) {
+        try {
+          const { apiKey } = bugsnagConfig
+          const [minifiedFile, minifiedUrl, projectRoot, sourceMap] = [
+            await fs.realpath(bundleOutputPath),
+            path.basename(bundleOutputPath),
+            await fs.realpath(path.join(composite.path, 'node_modules')),
+            await fs.realpath(sourceMapOutput),
+          ]
+          await bugsnagUpload({
+            apiKey,
+            minifiedFile,
+            minifiedUrl,
+            projectRoot,
+            sourceMap,
+            uploadSources: !!bundlingResult.isHermesBundle,
+            uploadSourcesGlob: composite
+              .getMiniAppsPackages()
+              .map(p => `**/${p.name}/**/@(*.js|*.ts)`),
+          })
+        } catch (e) {
+          log.error(`Bugsnag upload failed : ${e}`)
         }
       }
 
@@ -580,15 +631,12 @@ export function removeZeroPatchDigit({
 export async function getCodePushAppName(
   napDescriptor: AppVersionDescriptor
 ): Promise<string> {
-  let result = napDescriptor.name
   const cauldron = await getActiveCauldron()
   const codePushConfig = await cauldron.getCodePushConfig(napDescriptor)
-  if (codePushConfig && codePushConfig.appName) {
-    result = codePushConfig.appName
-  } else {
-    result = `${napDescriptor.name}${
+  return (
+    codePushConfig?.appName ??
+    `${napDescriptor.name}${
       napDescriptor.platform === 'ios' ? 'Ios' : 'Android'
     }`
-  }
-  return result
+  )
 }

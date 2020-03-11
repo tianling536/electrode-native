@@ -2,7 +2,6 @@ import {
   NativeDependencies,
   findNativeDependencies,
   PackagePath,
-  NativeDependency,
   readPackageJsonSync,
   BaseMiniApp,
   nativeDepenciesVersionResolution,
@@ -45,7 +44,7 @@ export class Composite {
   }
 
   public getJsApiImpls(): PackagePath[] {
-    return this.config.jsApiImplDependencies || []
+    return this.config.jsApiImplDependencies ?? []
   }
 
   public getMiniApps(): BaseMiniApp[] {
@@ -55,31 +54,28 @@ export class Composite {
     )
   }
 
-  public async getResolvedNativeDependencies(): Promise<any> {
+  public async getResolvedNativeDependencies() {
     const nativeDependencies = await this.getNativeDependencies()
     return nativeDepenciesVersionResolution.resolveNativeDependenciesVersionsEx(
       nativeDependencies
     )
   }
 
-  public async getInjectableNativeDependencies(
-    platform: NativePlatform
-  ): Promise<any> {
+  public async getInjectableNativeDependencies(platform: NativePlatform) {
     const dependencies = await this.getResolvedNativeDependencies()
     const result: PackagePath[] = []
     for (const dependency of dependencies.resolved) {
       // Always include react-native
-      if (dependency.basePath === 'react-native') {
+      if (dependency.name === 'react-native') {
         result.push(dependency)
         continue
       }
       const pluginConfig = await manifest.getPluginConfig(dependency)
-      if (pluginConfig) {
-        if (platform === 'android' && pluginConfig.android) {
-          result.push(dependency)
-        } else if (platform === 'ios' && pluginConfig.ios) {
-          result.push(dependency)
-        }
+
+      if (platform === 'android' && pluginConfig?.android) {
+        result.push(dependency)
+      } else if (platform === 'ios' && pluginConfig?.ios) {
+        result.push(dependency)
       }
     }
     return result
@@ -89,10 +85,15 @@ export class Composite {
    * Get the package name of the MiniApps present in this Composite
    */
   public getMiniAppsPackages(): Array<{
+    name: string
     path: string
     packagePath: PackagePath
   }> {
-    const result: Array<{ path: string; packagePath: PackagePath }> = []
+    const result: Array<{
+      name: string
+      path: string
+      packagePath: PackagePath
+    }> = []
 
     for (const key of Object.keys(this.packageJson.dependencies)) {
       const ppValue = PackagePath.fromString(this.packageJson.dependencies[key])
@@ -103,6 +104,7 @@ export class Composite {
         this.config.miniApps.some(p => p.basePath === ppValue.basePath)
       ) {
         result.push({
+          name: key,
           packagePath: ppValue,
           path: path.join(this.path, 'node_modules', key),
         })
@@ -110,6 +112,7 @@ export class Composite {
         this.config.miniApps.some(p => p.basePath === ppKey.basePath)
       ) {
         result.push({
+          name: key,
           packagePath: PackagePath.fromString(
             `${key}@${this.packageJson.dependencies[key]}`
           ),
@@ -137,27 +140,12 @@ export class Composite {
     // if developer(s) forgot to npm ignore the android/ios directory
     const miniAppsPaths = this.getMiniAppsPackages().map(p => p.path)
     nativeDependencies.all = nativeDependencies.all.filter(
-      x => !miniAppsPaths.includes(x.path)
+      x => !miniAppsPaths.includes(x.basePath)
     )
     nativeDependencies.thirdPartyNotInManifest = nativeDependencies.thirdPartyNotInManifest.filter(
-      x => !miniAppsPaths.includes(x.path)
+      x => !miniAppsPaths.includes(x.basePath)
     )
     this.cachedNativeDependencies = nativeDependencies
     return this.cachedNativeDependencies
-  }
-
-  /**
-   * Get the local absolute path of a given native dependency in this Composite
-   * Returns undefined if no matching dependency was found in this Composite
-   * @param d Native dependency to find in the composite
-   */
-  public async getNativeDependencyPath(d: PackagePath): Promise<string | void> {
-    const dependencies = await this.getNativeDependencies()
-    const dependency: NativeDependency | void = dependencies.all.find(x =>
-      x.packagePath.same(d)
-    )
-    if (dependency) {
-      return dependency.path
-    }
   }
 }

@@ -1,5 +1,4 @@
-import * as fileUtils from './fileUtil'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import shell from './shell'
 import createTmpDir from './createTmpDir'
@@ -22,6 +21,8 @@ export interface BundlingResult {
   bundlePath: string
   // Full path to the source map (if any)
   sourceMapPath?: string
+  // Is this an hermes bundle ?
+  isHermesBundle?: boolean
 }
 
 export default class ReactNativeCli {
@@ -38,7 +39,7 @@ export default class ReactNativeCli {
   ) {
     const dir = path.join(process.cwd(), appName)
 
-    if (fs.existsSync(dir)) {
+    if (await fs.pathExists(dir)) {
       throw new Error(`Path already exists will not override ${dir}`)
     }
 
@@ -68,6 +69,7 @@ export default class ReactNativeCli {
     platform,
     workingDir,
     sourceMapOutput,
+    resetCache,
   }: {
     entryFile: string
     dev: boolean
@@ -76,6 +78,7 @@ export default class ReactNativeCli {
     platform: string
     workingDir?: string
     sourceMapOutput?: string
+    resetCache?: boolean
   }): Promise<BundlingResult> {
     const bundleCommand = `${this.binaryPath} bundle \
 ${entryFile ? `--entry-file=${entryFile}` : ''} \
@@ -84,7 +87,7 @@ ${platform ? `--platform=${platform}` : ''} \
 ${bundleOutput ? `--bundle-output=${bundleOutput}` : ''} \
 ${assetsDest ? `--assets-dest=${assetsDest}` : ''} \
 ${sourceMapOutput ? `--sourcemap-output=${sourceMapOutput}` : ''} \
---reset-cache`
+${resetCache ? '--reset-cache' : ''}`
 
     await execp(bundleCommand, { cwd: workingDir })
     return {
@@ -205,7 +208,7 @@ ${sourceMapOutput ? `--sourcemap-output=${sourceMapOutput}` : ''} \
   }): Promise<string> {
     const tmpDir = createTmpDir()
     const tmpScriptPath = path.join(tmpDir, scriptFileName)
-    await fileUtils.writeFile(
+    await fs.writeFile(
       tmpScriptPath,
       `
 cd ${cwd}

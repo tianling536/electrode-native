@@ -18,7 +18,7 @@ import {
   generateContainer,
 } from 'ern-container-gen'
 
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import xcode from 'xcode-ern'
 import _ from 'lodash'
@@ -88,7 +88,7 @@ export default class IosGenerator implements ContainerGenerator {
 
     const reactNativePlugin = _.find(
       config.plugins,
-      p => p.basePath === 'react-native'
+      p => p.name === 'react-native'
     )
     if (!reactNativePlugin) {
       throw new Error('react-native was not found in plugins list !')
@@ -149,7 +149,7 @@ export default class IosGenerator implements ContainerGenerator {
     )
     if (
       path.dirname(tail) === 'IOS' &&
-      fs.existsSync(
+      fs.pathExistsSync(
         path.join(pluginSourcePath, path.dirname(pathToSwaggersAPIs))
       )
     ) {
@@ -171,7 +171,7 @@ export default class IosGenerator implements ContainerGenerator {
     outDir: string
   ): Promise<any> {
     for (const plugin of plugins) {
-      if (plugin.basePath === 'react-native') {
+      if (plugin.name === 'react-native') {
         continue
       }
       const pluginConfig = await manifest.getPluginConfig(plugin)
@@ -180,14 +180,12 @@ export default class IosGenerator implements ContainerGenerator {
       }
       if (!pluginConfig.ios) {
         log.warn(
-          `${
-            plugin.basePath
-          } does not have any injection configuration for ios platform`
+          `${plugin.name} does not have any injection configuration for ios platform`
         )
         continue
       }
       const iOSPluginHook = pluginConfig.ios.pluginHook
-      if (iOSPluginHook && iOSPluginHook.name) {
+      if (iOSPluginHook?.name) {
         if (!pluginConfig.path) {
           throw new Error('No plugin config path was set. Cannot proceed.')
         }
@@ -227,7 +225,7 @@ export default class IosGenerator implements ContainerGenerator {
   ): Promise<any> {
     const containerProject = xcode.project(containerProjectPath)
     return new Promise((resolve, reject) => {
-      containerProject.parse(err => {
+      containerProject.parse((err: any) => {
         if (err) {
           reject(err)
         }
@@ -251,13 +249,8 @@ export default class IosGenerator implements ContainerGenerator {
         continue
       }
 
-      const pluginSourcePath = await composite.getNativeDependencyPath(plugin)
-      if (!pluginSourcePath) {
-        throw new Error(`path to ${plugin.basePath} not found in composite`)
-      }
-
-      if (await utils.isDependencyPathNativeApiImpl(pluginSourcePath)) {
-        populateApiImplMustacheView(pluginSourcePath, mustacheView, true)
+      if (await utils.isDependencyPathNativeApiImpl(plugin.basePath)) {
+        populateApiImplMustacheView(plugin.basePath, mustacheView, true)
       }
     }
 

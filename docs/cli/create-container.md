@@ -19,6 +19,11 @@
 * Create a new container including all the MiniApps listed in the Cauldron for the given *complete native application descriptor*  
 * Use this option if you want to locally generate a container that mirrors the container of a given native application version.  
 
+`--devJsBundle`  
+
+* Will generate a development JavaScript bundle rather than a production one.
+**Default** false
+
 `--fromGitBranches`
 
 * Create Container using the latest commits made to each of the MiniApp branches (HEAD), rather than using the MiniApps SHAs that are inside the current Container version.  
@@ -64,6 +69,11 @@
 `--sourceMapOutput`
 
 * Path to source map file to generate for this container bundle
+
+`--resetCache`\
+
+* Indicates whether to reset the React Native cache prior to bundling
+* **Default** false
 
 #### Remarks
 

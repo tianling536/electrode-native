@@ -45,24 +45,6 @@ describe('logErrorAndExitIfNotSatisfied', () => {
     sandbox.restore()
   })
 
-  fixtures.invalidContainerVersions.forEach(containerVersion => {
-    it('[isValidContainerVersion] Should log error and exit process for invalid container version', async () => {
-      await logErrorAndExitIfNotSatisfied({
-        isValidContainerVersion: { containerVersion },
-      })
-      assertLoggedErrorAndExitedProcess()
-    })
-  })
-
-  fixtures.validContainerVersions.forEach(containerVersion => {
-    it('[isValidContainerVersion] Should not log error nor exit process for valid container version', async () => {
-      await logErrorAndExitIfNotSatisfied({
-        isValidContainerVersion: { containerVersion },
-      })
-      assertNoErrorLoggedAndNoProcessExit()
-    })
-  })
-
   it('[isNewerContainerVersion] Should log error and exit process for container version is not new', async () => {
     await logErrorAndExitIfNotSatisfied({
       isNewerContainerVersion: {
@@ -385,6 +367,15 @@ describe('logErrorAndExitIfNotSatisfied', () => {
     await logErrorAndExitIfNotSatisfied({
       isValidPlatformConfig: {
         key: 'sourceMapStoreProxy',
+      },
+    })
+    assertNoErrorLoggedAndNoProcessExit()
+  })
+
+  it('[isValidPlatformConfig] Should not log error and nor exit if key is whitelisted', async () => {
+    await logErrorAndExitIfNotSatisfied({
+      isValidPlatformConfig: {
+        key: 'bugsnagProxy',
       },
     })
     assertNoErrorLoggedAndNoProcessExit()

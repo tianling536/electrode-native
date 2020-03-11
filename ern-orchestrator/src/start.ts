@@ -13,7 +13,7 @@ import {
   AppVersionDescriptor,
 } from 'ern-core'
 import { getActiveCauldron } from 'ern-cauldron-api'
-import { generateComposite } from 'ern-composite-gen'
+import { Composite } from 'ern-composite-gen'
 import _ from 'lodash'
 import chokidar from 'chokidar'
 import path from 'path'
@@ -78,9 +78,8 @@ export default async function start({
     const compositeGenConfig = await cauldron.getCompositeGeneratorConfig(
       descriptor
     )
-    baseComposite =
-      baseComposite || (compositeGenConfig && compositeGenConfig.baseComposite)
-    resolutions = compositeGenConfig && compositeGenConfig.resolutions
+    baseComposite = baseComposite || compositeGenConfig?.baseComposite
+    resolutions = compositeGenConfig?.resolutions
   }
 
   // Because this command can only be stoped through `CTRL+C` (or killing the process)
@@ -92,8 +91,8 @@ export default async function start({
   compositeDir = compositeDir || createTmpDir()
   log.trace(`Temporary composite directory is ${compositeDir}`)
 
-  await kax.task('Generating MiniApps composite').run(
-    generateComposite({
+  const composite = await kax.task('Generating MiniApps composite').run(
+    Composite.generate({
       baseComposite,
       extraJsDependencies: extraJsDependencies || undefined,
       jsApiImplDependencies: jsApiImpls,
@@ -117,6 +116,13 @@ export default async function start({
       miniAppsLinksObj[packageJson.name] = m.basePath
     })
 
+  // Third party native modules
+  const nativeDependencies = await composite.getNativeDependencies()
+  const nativeModules: PackagePath[] = [
+    ...nativeDependencies.thirdPartyInManifest,
+    ...nativeDependencies.thirdPartyNotInManifest,
+  ]
+
   const packageCopyKaxTask = kax.task(
     'Copying all linked MiniApps to Composite'
   )
@@ -131,7 +137,8 @@ export default async function start({
         replacePackageInCompositeWithLinkedPackage(
           compositeDir,
           linkedMiniAppPackageName,
-          miniAppsLinksObj[linkedMiniAppPackageName]
+          miniAppsLinksObj[linkedMiniAppPackageName],
+          nativeModules
         )
       )
   }
@@ -158,14 +165,11 @@ export default async function start({
       const binaryStore = new ErnBinaryStore(binaryStoreConfig)
       if (await binaryStore.hasBinary(descriptor, { flavor })) {
         if (descriptor.platform === 'android') {
-          if (
-            cauldronStartCommandConfig &&
-            cauldronStartCommandConfig.android
-          ) {
+          if (cauldronStartCommandConfig?.android) {
             packageName =
-              packageName || cauldronStartCommandConfig.android.packageName
+              packageName ?? cauldronStartCommandConfig.android.packageName
             activityName =
-              activityName || cauldronStartCommandConfig.android.activityName
+              activityName ?? cauldronStartCommandConfig.android.activityName
           }
           if (!packageName) {
             throw new Error(
@@ -182,8 +186,8 @@ export default async function start({
             packageName,
           })
         } else if (descriptor.platform === 'ios') {
-          if (cauldronStartCommandConfig && cauldronStartCommandConfig.ios) {
-            bundleId = bundleId || cauldronStartCommandConfig.ios.bundleId
+          if (cauldronStartCommandConfig?.ios) {
+            bundleId = bundleId ?? cauldronStartCommandConfig.ios.bundleId
           }
           if (!bundleId) {
             throw new Error(
@@ -201,11 +205,9 @@ export default async function start({
 
   linkedMiniAppsPackageNames.forEach(pkgName => {
     log.info(
-      `Watching for changes in linked MiniApp directory ${
-        miniAppsLinksObj[pkgName]
-      }`
+      `Watching for changes in linked MiniApp directory ${miniAppsLinksObj[pkgName]}`
     )
-    startLinkSynchronization(compositeDir, pkgName, miniAppsLinksObj[pkgName])
+    startLinkSynchronization(compositeDir!, pkgName, miniAppsLinksObj[pkgName])
   })
 
   log.warn('=========================================================')
@@ -225,9 +227,10 @@ export default async function start({
 }
 
 async function replacePackageInCompositeWithLinkedPackage(
-  compositeDir,
-  linkedPackageName,
-  sourceLinkDir
+  compositeDir: string,
+  linkedPackageName: string,
+  sourceLinkDir: string,
+  excludedPackages: PackagePath[] = []
 ) {
   // Get path to package in composite node_modules
   // For example if the package name is @company/miniapp and the composite
@@ -238,11 +241,11 @@ async function replacePackageInCompositeWithLinkedPackage(
     linkedPackageName
   )
 
-  // Don't need android and ios directories to be copied over to the Composite
-  // Also exclude react-native and react to avoid haste collisions, as they are
-  // already part of the top level composite node_modules
-  // react-native-electrode-bridge is also excluded because having multiple
-  // instances of it might create issues
+  // Exclude android and ios directories as they are not needed for JS bundle
+  // Also exclude react to avoid any haste conflict (anyway it will
+  // be hoisted to top level node modules)
+  // Also exclude .git directory
+  // In addition, exclude any additional package provided to the function.
   const excludedDirectories = [
     'android',
     'ios',
@@ -250,9 +253,10 @@ async function replacePackageInCompositeWithLinkedPackage(
     'node_modules/react',
     'node_modules/react-native-electrode-bridge',
     '.git',
+    ...excludedPackages.map(d => path.normalize(`node_modules/${d.basePath}`)),
   ].map(f => path.join(sourceLinkDir, f))
 
-  const excludedDirectoriesRE = new RegExp(
+  const excludedDirectoriesRe = new RegExp(
     `^((?!${excludedDirectories.map(f => `${f}$`).join('|')}).*)`
   )
 
@@ -266,7 +270,7 @@ async function replacePackageInCompositeWithLinkedPackage(
       sourceLinkDir,
       pathToPackageInComposite,
       {
-        filter: excludedDirectoriesRE,
+        filter: excludedDirectoriesRe,
         limit: 512,
       } as any /* while waiting for https://github.com/DefinitelyTyped/DefinitelyTyped/pull/38883 to get merged */,
       err => {
@@ -281,9 +285,9 @@ async function replacePackageInCompositeWithLinkedPackage(
 }
 
 function startLinkSynchronization(
-  compositeDir,
-  linkedPackageName,
-  sourceLinkDir
+  compositeDir: string,
+  linkedPackageName: string,
+  sourceLinkDir: string
 ) {
   log.trace(
     `startLinkSynchronization [${compositeDir}] [${linkedPackageName}] [${sourceLinkDir}]`

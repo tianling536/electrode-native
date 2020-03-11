@@ -1,10 +1,12 @@
 import createTmpDir from './createTmpDir'
 import shell from './shell'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs-extra'
 import { PackagePath } from './PackagePath'
 import { execp } from './childProcess'
 import log from './log'
+import { spawn } from 'child_process'
+import { readPackageJson } from './packageJsonFileUtils'
 
 export class YarnCli {
   public readonly binaryPath: string
@@ -67,28 +69,42 @@ export class YarnCli {
     dependencyPath: PackagePath,
     {
       field,
-      json,
     }: {
       field?: string
-      json?: boolean
     } = {}
   ) {
-    if (dependencyPath.isFilePath) {
-      const packageJsonPath = path.join(dependencyPath.basePath, `package.json`)
-      log.debug(`[runYarnCommand] Running info: returning ${packageJsonPath} `)
-      return JSON.parse(fs.readFileSync(packageJsonPath, `utf-8`))
-    } else {
-      const cmd = `info ${dependencyPath.toString()} ${field || ''} ${
-        json ? '--json' : ''
-      }`
-      const output = await this.runYarnCommand(cmd)
+    log.trace(`[YarnCli] info(${dependencyPath}, {field: ${field}})`)
 
-      // Assume single line of yarn JSON output in stdout for yarn info
-      const outputStr = output.toString()
-      if (outputStr === '') {
-        throw new Error(`Could not find ${dependencyPath.toString()} package`)
-      }
-      return JSON.parse(output.toString())
+    if (dependencyPath.isFilePath) {
+      const pJson = await readPackageJson(dependencyPath.basePath)
+      return field ? pJson[field] : pJson
+    } else {
+      const args = [
+        'info',
+        dependencyPath.toString(),
+        ...(field ? [field] : []),
+        '--json',
+      ]
+
+      return new Promise((resolve, reject) => {
+        const cp = spawn(this.binaryPath, args)
+        cp.stdout.on('data', data => {
+          log.trace(data)
+          const jsonLine = JSON.parse(data.toString())
+          if (jsonLine.type === 'inspect') {
+            resolve(jsonLine.data)
+          }
+        })
+        cp.stderr.on('data', data => {
+          log.trace(data)
+          const jsonLine = JSON.parse(data.toString())
+          // 'warning' and 'error' packet types are sent to stderr
+          // we want to fail only on 'error'
+          if (jsonLine.type === 'error') {
+            reject(jsonLine.data)
+          }
+        })
+      })
     }
   }
 

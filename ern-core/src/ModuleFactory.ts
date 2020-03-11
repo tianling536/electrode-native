@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import shell from './shell'
 import { yarn } from './clients'
@@ -40,7 +40,7 @@ export class ModuleFactory<T> {
 
   private getPathToLocalPackage(p: PackagePath): string {
     const pathWithSrc = path.join(p.basePath, 'src')
-    return fs.existsSync(pathWithSrc) ? pathWithSrc : p.basePath
+    return fs.pathExistsSync(pathWithSrc) ? pathWithSrc : p.basePath
   }
 
   private async getPathToRegistryPackage(p: PackagePath): Promise<string> {
@@ -61,7 +61,7 @@ export class ModuleFactory<T> {
   }
 
   private doesPackageCacheExist(): boolean {
-    return fs.existsSync(this.packageCachePath)
+    return fs.pathExistsSync(this.packageCachePath)
   }
 
   private async createPackageCache() {
@@ -76,7 +76,7 @@ export class ModuleFactory<T> {
 
   private async refreshCacheFor(p: PackagePath) {
     const packageJson = await readPackageJson(this.packageCachePath)
-    return packageJson.dependencies && packageJson.dependencies[p.basePath]
+    return packageJson.dependencies?.[p.basePath]
       ? this.upgradeCachedPackage(p)
       : this.addPackageToCache(p)
   }

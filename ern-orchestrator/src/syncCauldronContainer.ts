@@ -5,6 +5,8 @@ import {
   log,
   AppVersionDescriptor,
   SourceMapStoreSdk,
+  createProxyAgentFromErnConfig,
+  bugsnagUpload,
 } from 'ern-core'
 import { getActiveCauldron } from 'ern-cauldron-api'
 import { runCauldronContainerGen } from './container'
@@ -14,6 +16,7 @@ import path from 'path'
 import semver from 'semver'
 import _ from 'lodash'
 import { runCauldronCompositeGen } from './composite'
+import fs from 'fs-extra'
 
 export async function syncCauldronContainer(
   stateUpdateFunc: () => Promise<any>,
@@ -21,9 +24,11 @@ export async function syncCauldronContainer(
   commitMessage: string | string[],
   {
     containerVersion,
+    resetCache,
     sourceMapOutput,
   }: {
     containerVersion?: string
+    resetCache?: boolean
     sourceMapOutput?: string
   } = {}
 ) {
@@ -53,6 +58,10 @@ export async function syncCauldronContainer(
         ? await cauldron.getContainerVersion(descriptor)
         : await cauldron.getTopLevelContainerVersion(descriptor)
       if (cauldronContainerNewVersion) {
+        if (!semver.valid(cauldronContainerNewVersion)) {
+          throw new Error(`${cauldronContainerNewVersion} is not a semver compliant version and therefore cannot be auto patch incremented.
+Please set the new container version through command options.`)
+        }
         cauldronContainerNewVersion = semver.inc(
           cauldronContainerNewVersion,
           'patch'
@@ -75,7 +84,7 @@ export async function syncCauldronContainer(
     const compositeGenConfig = await cauldron.getCompositeGeneratorConfig(
       descriptor
     )
-    const baseComposite = compositeGenConfig && compositeGenConfig.baseComposite
+    const baseComposite = compositeGenConfig?.baseComposite
 
     const compositeDir = createTmpDir()
 
@@ -96,18 +105,21 @@ export async function syncCauldronContainer(
     )
 
     // Generate Container from Cauldron
-    sourceMapOutput = sourceMapOutput || path.join(createTmpDir(), 'index.map')
-    await kax.task('Generating Container from Cauldron').run(
-      runCauldronContainerGen(descriptor, composite, {
-        outDir,
-        sourceMapOutput,
-      })
-    )
+    sourceMapOutput = sourceMapOutput ?? path.join(createTmpDir(), 'index.map')
+    const containerGenRes = await kax
+      .task('Generating Container from Cauldron')
+      .run(
+        runCauldronContainerGen(descriptor, composite, {
+          outDir,
+          resetCache,
+          sourceMapOutput,
+        })
+      )
 
     // Update container version in Cauldron
     await cauldron.updateContainerVersion(
       descriptor,
-      cauldronContainerNewVersion
+      cauldronContainerNewVersion!
     )
 
     // Update version of ern used to generate this Container
@@ -128,7 +140,7 @@ export async function syncCauldronContainer(
     await kax.task('Running Container Pipeline').run(
       runContainerPipelineForDescriptor({
         containerPath: outDir,
-        containerVersion: cauldronContainerNewVersion,
+        containerVersion: cauldronContainerNewVersion!,
         descriptor,
       })
     )
@@ -140,19 +152,44 @@ export async function syncCauldronContainer(
         const sdk = new SourceMapStoreSdk(sourcemapStoreConfig.url)
         await kax
           .task(
-            `Uploading source map to source map store [${
-              sourcemapStoreConfig.url
-            }]`
+            `Uploading source map to source map store [${sourcemapStoreConfig.url}]`
           )
           .run(
             sdk.uploadContainerSourceMap({
-              containerVersion: cauldronContainerNewVersion,
+              containerVersion: cauldronContainerNewVersion!,
               descriptor,
               sourceMapPath: sourceMapOutput,
             })
           )
       } catch (e) {
         log.error(`Source map upload failed : ${e}`)
+      }
+    }
+
+    // Upload source map to bugsnag if configured
+    const bugsnagConfig = await cauldron.getBugsnagConfig(descriptor)
+    if (bugsnagConfig) {
+      try {
+        const { apiKey } = bugsnagConfig
+        const [minifiedFile, minifiedUrl, projectRoot, sourceMap] = [
+          await fs.realpath(containerGenRes.bundlingResult.bundlePath),
+          path.basename(containerGenRes.bundlingResult.bundlePath),
+          await fs.realpath(path.join(composite.path, 'node_modules')),
+          await fs.realpath(containerGenRes.bundlingResult.sourceMapPath!),
+        ]
+        await bugsnagUpload({
+          apiKey,
+          minifiedFile,
+          minifiedUrl,
+          projectRoot,
+          sourceMap,
+          uploadSources: !!containerGenRes.bundlingResult.isHermesBundle,
+          uploadSourcesGlob: composite
+            .getMiniAppsPackages()
+            .map(p => `**/${p.name}/**/@(*.js|*.ts)`),
+        })
+      } catch (e) {
+        log.error(`Bugsnag upload failed : ${e}`)
       }
     }
 

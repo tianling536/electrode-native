@@ -23,29 +23,6 @@ describe('Ensure.js', () => {
   })
 
   // ==========================================================
-  // isValidContainerVersion
-  // ==========================================================
-  describe('isValidContainerVersion', () => {
-    fixtures.validContainerVersions.forEach(version => {
-      it('shoud not throw if version is valid', () => {
-        expect(
-          () => Ensure.isValidContainerVersion(version),
-          `throw for ${version}`
-        ).to.not.throw()
-      })
-    })
-
-    fixtures.invalidContainerVersions.forEach(version => {
-      it('should throw if version is invalid', () => {
-        expect(
-          () => Ensure.isValidContainerVersion(version),
-          `does not throw for ${version}`
-        ).to.throw()
-      })
-    })
-  })
-
-  // ==========================================================
   // noGitOrFilesystemPath
   // ==========================================================
   describe('noGitOrFilesystemPath', () => {
@@ -209,7 +186,7 @@ describe('Ensure.js', () => {
   describe('dependencyIsOrphaned', async () => {
     it('should throw if dependency is not orphaned', async () => {
       cauldronHelperStub.getYarnLock.resolves(
-        fs.readFileSync(path.join(__dirname, 'fixtures', 'sample.yarn.lock'))
+        fs.readFileSync(path.join(__dirname, 'fixtures/sample.yarn.lock'))
       )
       assert(
         await doesThrow(
@@ -223,7 +200,7 @@ describe('Ensure.js', () => {
 
     it('should not throw if dependency is orphaned [not in lock file]', async () => {
       cauldronHelperStub.getYarnLock.resolves(
-        fs.readFileSync(path.join(__dirname, 'fixtures', 'sample.yarn.lock'))
+        fs.readFileSync(path.join(__dirname, 'fixtures/sample.yarn.lock'))
       )
       assert(
         await doesNotThrow(
@@ -237,7 +214,7 @@ describe('Ensure.js', () => {
 
     it('should not throw if dependency is orphaned [in lock file]', async () => {
       cauldronHelperStub.getYarnLock.resolves(
-        fs.readFileSync(path.join(__dirname, 'fixtures', 'sample.yarn.lock'))
+        fs.readFileSync(path.join(__dirname, 'fixtures/sample.yarn.lock'))
       )
       assert(
         await doesNotThrow(
@@ -685,7 +662,7 @@ describe('Ensure.js', () => {
   // ==========================================================
   describe('isSupportedMiniAppOrJsApiImplVersion', () => {
     fixtures.supportedCauldronMiniAppsVersions.forEach(pkg => {
-      it('shoud not throw if suported version', () => {
+      it(`shoud not throw if suported version (pkg: ${pkg})`, () => {
         expect(
           () => Ensure.isSupportedMiniAppOrJsApiImplVersion(pkg),
           `throw for ${pkg}`
@@ -694,7 +671,7 @@ describe('Ensure.js', () => {
     })
 
     fixtures.unSupportedCauldronMiniAppsVersions.forEach(pkg => {
-      it('should throw if version is not supported', () => {
+      it(`should throw if version is not supported (pkg: ${pkg})`, () => {
         expect(
           () => Ensure.isSupportedMiniAppOrJsApiImplVersion(pkg),
           `does not throw for ${pkg}`

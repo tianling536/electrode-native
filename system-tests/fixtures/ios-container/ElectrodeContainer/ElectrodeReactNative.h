@@ -34,6 +34,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)rootViewDidChangeIntrinsicSize:(UIView *)rootView;
 @end
 
+@protocol ERNDelegate <NSObject>
+- (void)reactNativeDidInitialize;
+@optional
+- (void)rctModuleDidInitialize;
+@end
+
 ////////////////////////////////////////////////////////////////////////////////
 #pragma mark - ElectrodeReactNative
 /**
@@ -68,6 +74,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 
 + (void)startWithConfigurations:(id<ElectrodePluginConfig>)reactContainerConfig
+                        __attribute((deprecated("use -startWithConfigurations:ernDelegate instead")));
+
++ (void)startWithConfigurations:(id<ElectrodePluginConfig>)reactContainerConfig ernDelegate:(id<ERNDelegate>)ernDelegate
 ;
 
 

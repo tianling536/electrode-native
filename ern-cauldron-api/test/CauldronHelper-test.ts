@@ -220,7 +220,6 @@ describe('CauldronHelper.js', () => {
         PackagePath.fromString('https://github.com/foo/test-miniapp.git#master')
       )
       const nativeAppVersion = jp.query(fixture, testAndroid1780Path)[0]
-      console.log(`MINIAPPS : ${nativeAppVersion.container.miniApps}`)
       expect(
         nativeAppVersion.container.miniApps.includes(
           'https://github.com/foo/test-miniapp.git#6319d9ef0c237907c784a8c472b000d5ff83b49a'
@@ -296,7 +295,6 @@ describe('CauldronHelper.js', () => {
         )
       )
       const nativeAppVersion = jp.query(fixture, testAndroid1780Path)[0]
-      console.log(`MINIAPPS : ${nativeAppVersion.container.miniApps}`)
       expect(
         nativeAppVersion.container.miniApps.includes(
           'git+ssh://git@github.com:electrode-io/gitMiniApp.git#6319d9ef0c237907c784a8c472b000d5ff83b49a'
@@ -1274,7 +1272,7 @@ describe('CauldronHelper.js', () => {
       const cauldronHelper = createCauldronHelper({ cauldronDocument: fixture })
       await cauldronHelper.addFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       const hasAddedFile = await fileStore.hasFile(
         'path/in/cauldron/testfile.ext'
@@ -1290,7 +1288,7 @@ describe('CauldronHelper.js', () => {
       assert(
         doesThrow(cauldronHelper.updateFile, cauldronHelper, {
           cauldronFilePath: 'path/in/cauldron/testfile.ext',
-          localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+          localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
         })
       )
     })
@@ -1300,11 +1298,11 @@ describe('CauldronHelper.js', () => {
       const cauldronHelper = createCauldronHelper({ cauldronDocument: fixture })
       await cauldronHelper.addFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       await cauldronHelper.updateFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       const hasAddedFile = await fileStore.hasFile(
         'path/in/cauldron/testfile.ext'
@@ -1320,7 +1318,7 @@ describe('CauldronHelper.js', () => {
       assert(
         doesThrow(cauldronHelper.removeFile, cauldronHelper, {
           cauldronFilePath: 'path/in/cauldron/testfile.ext',
-          localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+          localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
         })
       )
     })
@@ -1330,7 +1328,7 @@ describe('CauldronHelper.js', () => {
       const cauldronHelper = createCauldronHelper({ cauldronDocument: fixture })
       await cauldronHelper.addFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       await cauldronHelper.removeFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
@@ -1355,7 +1353,7 @@ describe('CauldronHelper.js', () => {
       const cauldronHelper = createCauldronHelper({ cauldronDocument: fixture })
       await cauldronHelper.addFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       const hasFile = await cauldronHelper.hasFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
@@ -1380,7 +1378,7 @@ describe('CauldronHelper.js', () => {
       const cauldronHelper = createCauldronHelper({ cauldronDocument: fixture })
       await cauldronHelper.addFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
-        localFilePath: path.resolve(__dirname, 'fixtures', 'testfile.ext'),
+        localFilePath: path.resolve(__dirname, 'fixtures/testfile.ext'),
       })
       const fileContent = await cauldronHelper.getFile({
         cauldronFilePath: 'path/in/cauldron/testfile.ext',
@@ -1424,7 +1422,7 @@ describe('CauldronHelper.js', () => {
         'bundleContent'
       )
       const bundledAdded = await fileStore.hasFile(
-        path.join('bundles', 'test-android-17.7.0.zip')
+        path.join('bundles/test-android-17.7.0.zip')
       )
       expect(bundledAdded).true
     })
@@ -2736,7 +2734,7 @@ describe('CauldronHelper.js', () => {
       const storeTmpDir = createTmpDir()
       shell.mkdir('-p', path.join(storeTmpDir, 'config'))
       fs.writeFileSync(
-        path.join(storeTmpDir, 'config', 'test-android-17.7.0.json'),
+        path.join(storeTmpDir, 'config/test-android-17.7.0.json'),
         JSON.stringify({ detachContainerVersionFromRoot: true })
       )
       const cauldronHelper = createCauldronHelper({
@@ -3192,13 +3190,11 @@ describe('CauldronHelper.js', () => {
       })
       const pathToSourceConfig = path.join(
         fileStoreTmpDir,
-        'config',
-        'test-android-17.7.0.json'
+        'config/test-android-17.7.0.json'
       )
       const pathToTargetConfig = path.join(
         fileStoreTmpDir,
-        'config',
-        'test-android-20.0.0.json'
+        'config/test-android-20.0.0.json'
       )
       const hasCreatedConfig = fs.existsSync(pathToTargetConfig)
       expect(hasCreatedConfig).true
@@ -3230,13 +3226,11 @@ describe('CauldronHelper.js', () => {
       })
       const pathToSourceConfig = path.join(
         fileStoreTmpDir,
-        'config',
-        'test-android-17.7.0.json'
+        'config/test-android-17.7.0.json'
       )
       const pathToTargetConfig = path.join(
         fileStoreTmpDir,
-        'config',
-        'test-android-20.0.0.json'
+        'config/test-android-20.0.0.json'
       )
       const hasCreatedConfig = fs.existsSync(pathToTargetConfig)
       expect(hasCreatedConfig).false

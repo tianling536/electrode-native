@@ -113,6 +113,25 @@ The objects contain a `path` property, a `string` property and a `replaceWith` p
 
 This example shows how to replace the string `"RCTBridgeModule.h"` with `<React/RCTBridgeModule.h>` in the `/Libraries/RNLocation/RNLocation.h` file in the container.
 
+- `applyPatch`
+
+Apply a given patch file, by running `git apply` command, from a specific directory.  
+The value of this property should be a single object containing the following two properties :
+  - `patch` : Path to the patch file to apply, relative to the directory containing the pluging configuration file (`config.json`).
+  - `root` : Path to the directory from which to run the `git apply` command, relative to the container generator output directory.
+
+**Example**
+
+```json
+{
+  "patch": "foo.patch",
+  "root": "{{{projectName}}}/Libraries/BarNativeModule"
+}
+
+```
+
+This example applies the `foo.patch` patch file, by running `git apply` command from the `{{{projectName}}}/Libraries/BarNativeModule` directory.  
+
 #### Platform-specific directives
 
 The platform-specific directives for Android and iOS are described in this section.
@@ -151,6 +170,24 @@ If the `transitive` flag is needed for a given dependency, it is possible to use
 compile 'com.google.android.gms:play-services-base:10.0.1'
 compile 'com.google.android.gms:play-services-maps:10.0.1'
 compile('com.crashlytics.sdk.android:crashlytics:2.9.2@aar') { transitive = true }
+```
+
+- `features`
+
+An array of one or more [Android hardware or software features](https://developer.android.com/guide/topics/manifest/uses-feature-element) used by the native module, to add to the container manifest when injecting this plugin.
+
+**For example**
+
+```json
+"features" : [
+  "android.hardware.bluetooth"
+]
+```
+
+**Will result in the following injection in Container manifest**
+
+```xml
+<uses-feature android:name="android.hardware.bluetooth" />
 ```
 
 #### iOS

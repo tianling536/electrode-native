@@ -28,7 +28,6 @@ export { yarn, reactnative } from './clients'
 export {
   NativeDependencies,
   findNativeDependencies,
-  NativeDependency,
   getNativeDependencyPath,
 } from './nativeDependenciesLookup'
 export { tagOneLine } from './tagoneline'
@@ -52,6 +51,9 @@ export * from './BundleStoreSdk'
 export * from './BundleStoreEngine'
 export * from './SourceMapStoreSdk'
 export * from './config'
+export * from './gitApply'
+export * from './createProxyAgent'
+export * from './bugsnagUpload'
 
 export const config = _config
 export const Platform = _Platform
@@ -78,6 +80,7 @@ export const nativeDepenciesVersionResolution = _nativeDepenciesVersionResolutio
 export { getPackagePathsDiffs } from './getPackagePathsDiffs'
 export * from './findDirectoriesHavingRnConfig'
 export * from './BundleStoreSdk'
+export * from './HermesCli'
 
 export {
   CodePushPackageInfo,
@@ -98,10 +101,9 @@ export { packageCache } from './packageCache'
 export { normalizeVersionsToSemver } from './normalizeVersionsToSemver'
 export { unzip } from './unzip'
 export { createZippedBundle } from './createZippedBundle'
-export {
-  checkIfModuleNameContainsSuffix,
-} from './checkIfModuleNameContainsSuffix'
+export { checkIfModuleNameContainsSuffix } from './checkIfModuleNameContainsSuffix'
 export { getCodePushSdk } from './getCodePushSdk'
 export { getCodePushInitConfig } from './getCodePushInitConfig'
 export { PackageManager } from './PackageManager'
 export { LogLevel } from './coloredLog'
+export { IosDevice } from './ios'

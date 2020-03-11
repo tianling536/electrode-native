@@ -1,5 +1,5 @@
 import { execSync, execFile } from 'child_process'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import semver from 'semver'
 import { manifest } from './Manifest'
@@ -43,10 +43,10 @@ export class MiniApp extends BaseMiniApp {
     return new MiniApp(fsPath, PackagePath.fromString(fsPath))
   }
 
-  public static existInPath(p) {
+  public static existInPath(p: string) {
     // Need to improve this one to check in the package.json if it contains the
     // ern object with miniapp type
-    return fs.existsSync(path.join(p, 'package.json'))
+    return fs.pathExistsSync(path.join(p, 'package.json'))
   }
 
   public static async fromPackagePath(packagePath: PackagePath) {
@@ -88,6 +88,9 @@ export class MiniApp extends BaseMiniApp {
         }
       }
     }
+    if (!fsPackagePath) {
+      throw new Error(`Could not resolve local path to ${packagePath}`)
+    }
     this.miniAppFsPathByPackagePath.set(packagePath.fullPath, fsPackagePath)
     return new MiniApp(fsPackagePath, packagePath)
   }
@@ -111,7 +114,7 @@ export class MiniApp extends BaseMiniApp {
       template?: string
     } = {}
   ) {
-    if (fs.existsSync(path.join('node_modules', 'react-native'))) {
+    if (await fs.pathExists(path.join('node_modules/react-native'))) {
       throw new Error(
         'It seems like there is already a react native app in this directory. Use another directory.'
       )
@@ -153,6 +156,16 @@ export class MiniApp extends BaseMiniApp {
       throw e
     }
 
+    if (
+      process.platform === 'darwin' &&
+      semver.gte(reactNativeVersion, '0.60.0') &&
+      !Platform.isCocoaPodsInstalled()
+    ) {
+      throw new Error(`pod command not found.
+CocoaPods is required starting from React Native 0.60 version.
+You can find instructions to install CocoaPods @ https://cocoapods.org`)
+    }
+
     await kax
       .task(
         `Creating ${miniAppName} project using react-native v${reactNativeVersion}`
@@ -171,7 +184,7 @@ export class MiniApp extends BaseMiniApp {
     // Create .npmignore if it does not exist
     const npmIgnorePath = path.join(process.cwd(), miniAppName, '.npmignore')
     if (!npmIgnorePath) {
-      fs.writeFileSync(npmIgnorePath, npmIgnoreContent)
+      await fs.writeFile(npmIgnorePath, npmIgnoreContent)
     }
 
     // Inject ern specific data in MiniApp package.json
@@ -211,10 +224,9 @@ export class MiniApp extends BaseMiniApp {
     // resolver blacklisted paths.
     // See https://github.com/facebook/react-native/issues/9136#issuecomment-348773574
     if (semver.gt(reactNativeVersion, '0.57.0') && !template) {
-      fs.writeFileSync(
+      await fs.writeFile(
         path.join(miniAppPath, 'metro.config.js'),
-        `
-const blacklist = require('metro-config/src/defaults/blacklist');
+        `const blacklist = require('metro-config/src/defaults/blacklist');
 module.exports = {
   resolver: {
     blacklistRE: blacklist([
@@ -223,8 +235,8 @@ module.exports = {
       // ignore git directories
       /.*\\.git\\/.*/,
       // Ignore android directories
-      /.*\\/app\\/build\\/.*/
-    ])
+      /.*\\/app\\/build\\/.*/,
+    ]),
   },
   transformer: {
     getTransformOptions: async () => ({
@@ -287,13 +299,13 @@ module.exports = {
     const nativeDependencies: NativeDependencies = await this.getNativeDependencies()
     const nativeDependenciesNames: string[] = _.map(
       nativeDependencies.all,
-      d => d.packagePath.basePath
+      d => d.name!
     )
     const nativeAndJsDependencies = this.getPackageJsonDependencies()
 
     return _.filter(
       nativeAndJsDependencies,
-      d => !nativeDependenciesNames.includes(d.basePath)
+      d => !nativeDependenciesNames.includes(`${d.name!}@${d.version}`)
     )
   }
 
@@ -354,38 +366,30 @@ module.exports = {
           )
           let dep
           for (dep of nativeDependencies.all) {
-            if (
-              dependency.same(new PackagePath(dep.packagePath.basePath), {
-                ignoreVersion: true,
-              })
-            ) {
-              if (
-                await utils.isDependencyApiOrApiImpl(dep.packagePath.basePath)
-              ) {
-                log.debug(`${dep.packagePath.toString()} is an api or api-impl`)
+            if (dependency.name === dep.name) {
+              if (await utils.isDependencyApiOrApiImpl(dep)) {
+                log.debug(`${dep.name} is an api or api-impl`)
                 log.warn(
-                  `${dep.packagePath.toString()} is not declared in the Manifest. You might consider adding it.`
+                  `${dep.name} is not declared in the Manifest. You might consider adding it.`
                 )
               } else {
                 // This is a third party native dependency. If it's not in the master manifest,
                 // then it means that it is not supported by the platform yet. Fail.
                 return log.error(
-                  `${dep.packagePath.toString()} plugin is not yet supported. Consider adding support for it to the master manifest`
+                  `${dep.name} plugin is not yet supported. Consider adding support for it to the master manifest`
                 )
               }
             } else {
               // This is a dependency which is not native itself but contains a native dependency as  transitive one (example 'native-base')
               // If ern platform contains entry in the manifest but dependency versions do not align, report error
               const manifestDep = await manifest.getNativeDependency(
-                new PackagePath(dep.packagePath.basePath),
+                new PackagePath(dep.basePath),
                 { manifestId }
               )
               if (manifestDep) {
-                if (
-                  !dep.packagePath.same(manifestDep, { ignoreVersion: false })
-                ) {
+                if (dep.version !== manifestDep.version) {
                   throw new Error(
-                    `[Transitive Dependency] ${dep.packagePath.toString()} was not added to the MiniApp`
+                    `[Transitive Dependency] ${dep.name} was not added to the MiniApp`
                   )
                 }
               }
@@ -395,13 +399,11 @@ module.exports = {
       } else {
         if (dependency.version) {
           log.debug(
-            `Dependency:${dependency.toString()} defined in manifest, performing version match`
+            `Dependency:${dependency.name} defined in manifest, performing version match`
           )
           // If the dependency & manifest version differ, log error and exit
-          if (!dependency.same(manifestDependency, { ignoreVersion: false })) {
-            throw new Error(
-              `${dependency.toString()} was not added to the MiniApp`
-            )
+          if (dependency.version !== manifestDependency.version) {
+            throw new Error(`${dependency.name} was not added to the MiniApp`)
           }
         }
       }
@@ -452,9 +454,7 @@ module.exports = {
       log.warn(`Manifest version: ${manifestDependency.version || 'undefined'}`)
       log.warn(`Wanted version: ${dependency.version || 'undefined'}`)
       log.warn(
-        `You might want to update the version in your Manifest to add this dependency to ${
-          this.name
-        }`
+        `You might want to update the version in your Manifest to add this dependency to ${this.name}`
       )
       return dependency
     }
@@ -481,9 +481,7 @@ module.exports = {
         ]
         if (dependencyManifestVersion !== localDependencyVersion) {
           log.info(
-            `${
-              manifestDependency.basePath
-            } : ${localDependencyVersion} => ${dependencyManifestVersion}`
+            `${manifestDependency.basePath} : ${localDependencyVersion} => ${dependencyManifestVersion}`
           )
           this.packageJson.dependencies[
             manifestDependency.basePath
@@ -494,9 +492,7 @@ module.exports = {
 
     // Update ernPlatformVersion in package.json
     if (!this.packageJson.ern) {
-      throw new Error(`In order to upgrade, please first replace "ernPlatformVersion" : "${
-        this.packageJson.ernPlatformVersion
-      }" in your package.json
+      throw new Error(`In order to upgrade, please first replace "ernPlatformVersion" : "${this.packageJson.ernPlatformVersion}" in your package.json
 with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`)
     }
 
@@ -504,7 +500,7 @@ with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`)
 
     // Write back package.json
     const appPackageJsonPath = path.join(this.path, 'package.json')
-    fs.writeFileSync(
+    await fs.writeFile(
       appPackageJsonPath,
       JSON.stringify(this.packageJson, null, 2)
     )
@@ -522,9 +518,7 @@ with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`)
     const previousLinkPath = miniAppsLinks[this.packageJson.name]
     if (previousLinkPath && previousLinkPath !== this.path) {
       log.warn(
-        `Replacing previous link [${
-          this.packageJson.name
-        } => ${previousLinkPath}]`
+        `Replacing previous link [${this.packageJson.name} => ${previousLinkPath}]`
       )
     } else if (previousLinkPath && previousLinkPath === this.path) {
       return log.warn(
@@ -534,9 +528,7 @@ with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`)
     miniAppsLinks[this.packageJson.name] = this.path
     config.set('miniAppsLinks', miniAppsLinks)
     log.info(
-      `${this.packageJson.name} link created [${this.packageJson.name} => ${
-        this.path
-      }]`
+      `${this.packageJson.name} link created [${this.packageJson.name} => ${this.path}]`
     )
   }
 

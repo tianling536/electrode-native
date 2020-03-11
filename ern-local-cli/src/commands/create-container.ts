@@ -23,7 +23,7 @@ import {
 } from '../lib'
 import _ from 'lodash'
 import { Argv } from 'yargs'
-import fs from 'fs'
+import fs from 'fs-extra'
 import { parseJsonFromStringOrFile } from 'ern-orchestrator'
 import untildify from 'untildify'
 
@@ -54,6 +54,11 @@ export const builder = (argv: Argv) => {
         'Optional extra run configuration (json string or local/cauldron path to config file)',
       type: 'string',
     })
+    .option('devJsBundle', {
+      describe:
+        'Generate a development JavaScript bundle rather than a production one',
+      type: 'boolean',
+    })
     .option('fromGitBranches', {
       describe:
         'Create Container based on MiniApps branches rather than current MiniApps SHAs',
@@ -80,6 +85,12 @@ export const builder = (argv: Argv) => {
       describe: 'The platform for which to generate the container',
       type: 'string',
     })
+    .option('resetCache', {
+      default: false,
+      describe:
+        'Indicates whether to reset the React Native cache prior to bundling',
+      type: 'boolean',
+    })
     .option('outDir', {
       alias: 'out',
       describe: 'Directory to output the generated container to',
@@ -98,6 +109,7 @@ export const commandHandler = async ({
   baseComposite,
   compositeDir,
   descriptor,
+  devJsBundle,
   extra,
   fromGitBranches,
   ignoreRnpmAssets,
@@ -105,11 +117,13 @@ export const commandHandler = async ({
   miniapps,
   outDir,
   platform,
+  resetCache,
   sourceMapOutput,
 }: {
   baseComposite?: PackagePath
   compositeDir?: string
   descriptor?: AppVersionDescriptor
+  devJsBundle?: boolean
   extra?: string
   fromGitBranches?: boolean
   ignoreRnpmAssets?: boolean
@@ -117,10 +131,11 @@ export const commandHandler = async ({
   miniapps?: PackagePath[]
   outDir?: string
   platform?: NativePlatform
+  resetCache?: boolean
   sourceMapOutput?: string
 } = {}) => {
-  if (outDir && fs.existsSync(outDir)) {
-    if (fs.readdirSync(outDir).length > 0) {
+  if (outDir && (await fs.pathExists(outDir))) {
+    if ((await fs.readdir(outDir)).length > 0) {
       throw new Error(
         `${outDir} directory exists and is not empty.
 Output directory should either not exist (it will be created) or should be empty.`
@@ -178,9 +193,11 @@ Output directory should either not exist (it will be created) or should be empty
     outDir = outDir || Platform.getContainerGenOutDirectory(platform)
     await kax.task('Generating Container locally').run(
       runLocalContainerGen(platform, composite, {
+        devJsBundle,
         extra: extraObj,
         ignoreRnpmAssets,
         outDir,
+        resetCache,
         sourceMapOutput,
       })
     )
@@ -197,7 +214,9 @@ Output directory should either not exist (it will be created) or should be empty
       outDir || Platform.getContainerGenOutDirectory(descriptor.platform!)
     await kax.task('Generating Container from Cauldron').run(
       runCauldronContainerGen(descriptor, composite, {
+        devJsBundle,
         outDir,
+        resetCache,
         sourceMapOutput,
       })
     )

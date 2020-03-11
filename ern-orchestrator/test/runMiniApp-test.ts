@@ -16,7 +16,7 @@ import { AndroidRunnerGenerator } from 'ern-runner-gen-android'
 import { runMiniApp } from '../src/runMiniApp'
 import { assert, expect } from 'chai'
 import sinon from 'sinon'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 
 const sandbox = sinon.createSandbox()
@@ -68,11 +68,7 @@ describe('runMiniApp', () => {
           composite: {
             getNativeDependencies: () =>
               Promise.resolve({
-                all: [
-                  {
-                    packagePath: PackagePath.fromString('react-native@0.59.8'),
-                  },
-                ],
+                all: [PackagePath.fromString('react-native@0.59.8')],
                 apis: [],
                 nativeApisImpl: [],
                 thirdPartyInManifest: [],
@@ -101,9 +97,16 @@ describe('runMiniApp', () => {
     miniAppExistInPath?: boolean
   } = {}) {
     sandbox
-      .stub(fs, 'existsSync')
+      .stub(fs, 'pathExistsSync')
       .callsFake(p =>
         p.toString().endsWith('RunnerConfig.java') ? false : existsSyncReturn
+      )
+    sandbox
+      .stub(fs, 'pathExists')
+      .callsFake(p =>
+        p.toString().endsWith('RunnerConfig.java')
+          ? Promise.resolve(false)
+          : Promise.resolve(existsSyncReturn)
       )
     sandbox.stub(core.MiniApp, 'existInPath').returns(miniAppExistInPath)
   }

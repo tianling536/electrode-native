@@ -113,7 +113,11 @@ export default class CauldronApi {
     return cauldron.schemaVersion || '0.0.0'
   }
 
-  public async getDescriptor(descriptor: AnyAppDescriptor): Promise<any> {
+  public async getDescriptor(
+    descriptor: AnyAppDescriptor
+  ): Promise<
+    CauldronNativeApp | CauldronNativeAppPlatform | CauldronNativeAppVersion
+  > {
     return descriptor instanceof AppVersionDescriptor
       ? this.getVersion(descriptor)
       : descriptor instanceof AppPlatformDescriptor
@@ -557,9 +561,7 @@ export default class CauldronApi {
     const nativeApplication = await this.getNativeApplication(descriptor)
     if (!exists(nativeApplication.platforms, platform)) {
       throw new Error(
-        `${platform} platform does not exist for ${
-          descriptor.name
-        } native application`
+        `${platform} platform does not exist for ${descriptor.name} native application`
       )
     }
     _.remove(nativeApplication.platforms, x => x.name === platform)
@@ -903,7 +905,7 @@ export default class CauldronApi {
   public async getPathToYarnLock(
     descriptor: AppVersionDescriptor,
     key: string
-  ): Promise<string | void> {
+  ): Promise<string | undefined> {
     const version = await this.getVersion(descriptor)
     const fileName = version.yarnLocks[key]
     if (fileName) {
@@ -1074,9 +1076,7 @@ export default class CauldronApi {
       e === existingPkg ? pkg.fullPath : e
     )
     return this.commit(
-      `Update ${pkg.basePath} to version ${
-        pkg.version
-      } in ${descriptor} Container`
+      `Update ${pkg.basePath} to version ${pkg.version} in ${descriptor} Container`
     )
   }
 
@@ -1097,16 +1097,12 @@ export default class CauldronApi {
       )
     ) {
       throw new Error(
-        `${
-          pkg.basePath
-        } is already in ${descriptor} Container. Use update instead.`
+        `${pkg.basePath} is already in ${descriptor} Container. Use update instead.`
       )
     }
     container[key]!.push(pkg.fullPath)
     return this.commit(
-      `Add ${pkg.basePath} with version ${
-        pkg.version
-      } in ${descriptor} Container`
+      `Add ${pkg.basePath} with version ${pkg.version} in ${descriptor} Container`
     )
   }
 

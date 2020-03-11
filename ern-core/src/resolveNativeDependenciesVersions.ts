@@ -7,17 +7,21 @@ export function containsVersionMismatch(
   versions: string[],
   mismatchLevel: 'major' | 'minor' | 'patch'
 ): boolean {
-  const minVersion = semver.minSatisfying(versions, '*')
-  const maxVersion = semver.maxSatisfying(versions, '*')
-  const majorMismatch = semver.major(maxVersion) !== semver.major(minVersion)
-  const minorMismatch = semver.minor(maxVersion) !== semver.minor(minVersion)
-  const patchMismatch = semver.patch(maxVersion) !== semver.patch(minVersion)
-  return (
-    majorMismatch ||
-    (minorMismatch &&
-      (mismatchLevel === 'minor' || mismatchLevel === 'patch')) ||
-    (patchMismatch && mismatchLevel === 'patch')
-  )
+  const semverVersions = versions.map(v => semver.parse(v)!)
+  const hasMajorDiff = _.uniqBy(semverVersions, 'major').length > 1
+  const hasMinorDiff = _.uniqBy(semverVersions, 'minor').length > 1
+  const hasPatchDiff = _.uniqBy(semverVersions, 'patch').length > 1
+  const hasPreReleaseDiff =
+    _.uniqWith(
+      semverVersions.map(v => v.prerelease),
+      _.isEqual
+    ).length > 1
+
+  return mismatchLevel === 'patch'
+    ? hasMajorDiff || hasMinorDiff || hasPatchDiff || hasPreReleaseDiff
+    : mismatchLevel === 'minor'
+    ? hasMajorDiff || hasMinorDiff || hasPreReleaseDiff
+    : hasMajorDiff || hasPreReleaseDiff
 }
 
 export function retainHighestVersions(
@@ -25,7 +29,7 @@ export function retainHighestVersions(
   dependenciesB: PackagePath[]
 ): PackagePath[] {
   const result: PackagePath[] = []
-  const groups = _.groupBy([...dependenciesA, ...dependenciesB], 'basePath')
+  const groups = _.groupBy([...dependenciesA, ...dependenciesB], 'name')
   let dependencyGroup: any
   for (dependencyGroup of Object.values(groups)) {
     let highestVersionDependency = dependencyGroup[0]
@@ -52,26 +56,26 @@ export function resolvePackageVersionsGivenMismatchLevel(
     resolved: [],
   }
 
-  const pluginsByBasePath = _.groupBy(
+  const pluginsByName = _.groupBy(
     _.unionBy(plugins, p => p.toString()),
-    'basePath'
+    'name'
   )
 
-  for (const basePath of Object.keys(pluginsByBasePath)) {
-    const entry = pluginsByBasePath[basePath]
+  for (const name of Object.keys(pluginsByName)) {
+    const entry = pluginsByName[name]
     const pluginVersions = _.map(entry, 'version')
     if (pluginVersions.length > 1) {
       // If there are multiple versions of the dependency
       if (containsVersionMismatch(<string[]>pluginVersions, mismatchLevel)) {
         // If at least one of the versions major digit differs, deem incompatibility
-        result.pluginsWithMismatchingVersions.push(basePath)
+        result.pluginsWithMismatchingVersions.push(name)
       } else {
         // No mismatchLevel version differences, just return the highest version
         result.resolved.push(
           _.find(
             entry,
             c =>
-              c.basePath === basePath &&
+              c.name === name &&
               c.version === semver.maxSatisfying(<string[]>pluginVersions, '*')
           )
         )
@@ -117,18 +121,17 @@ export function resolveNativeDependenciesVersions(
 
 export function resolveNativeDependenciesVersionsEx(
   dependencies: NativeDependencies
-) {
+): {
+  pluginsWithMismatchingVersions: string[]
+  resolved: PackagePath[]
+} {
   // Resolve native dependencies versions of APIs / APIs impls
   let apisAndApiImplsNativeDeps: PackagePath[] = []
   if (dependencies.apis.length > 0) {
-    apisAndApiImplsNativeDeps.push(
-      ..._.flatten(dependencies.apis.map(x => x.packagePath))
-    )
+    apisAndApiImplsNativeDeps.push(..._.flatten(dependencies.apis))
   }
   if (dependencies.nativeApisImpl.length > 0) {
-    apisAndApiImplsNativeDeps.push(
-      ..._.flatten(dependencies.nativeApisImpl.map(x => x.packagePath))
-    )
+    apisAndApiImplsNativeDeps.push(..._.flatten(dependencies.nativeApisImpl))
   }
   apisAndApiImplsNativeDeps = _.flatten(apisAndApiImplsNativeDeps)
   const apiAndApiImplsResolvedVersions = resolvePackageVersionsGivenMismatchLevel(
@@ -140,12 +143,12 @@ export function resolveNativeDependenciesVersionsEx(
   let thirdPartyNativeModules: PackagePath[] = []
   if (dependencies.thirdPartyInManifest.length > 0) {
     thirdPartyNativeModules.push(
-      ..._.flatten(dependencies.thirdPartyInManifest.map(x => x.packagePath))
+      ..._.flatten(dependencies.thirdPartyInManifest)
     )
   }
   if (dependencies.thirdPartyNotInManifest.length > 0) {
     thirdPartyNativeModules.push(
-      ..._.flatten(dependencies.thirdPartyNotInManifest.map(x => x.packagePath))
+      ..._.flatten(dependencies.thirdPartyNotInManifest)
     )
   }
   thirdPartyNativeModules = _.flatten(thirdPartyNativeModules)

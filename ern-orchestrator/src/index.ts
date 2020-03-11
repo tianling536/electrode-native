@@ -1,8 +1,4 @@
-export {
-  runLocalContainerGen,
-  runCauldronContainerGen,
-  containsVersionMismatch,
-} from './container'
+export { runLocalContainerGen, runCauldronContainerGen } from './container'
 
 export { runLocalCompositeGen, runCauldronCompositeGen } from './composite'
 
@@ -33,9 +29,7 @@ export { launchRunner } from './launchRunner'
 export { runMiniApp } from './runMiniApp'
 export { getBinaryStoreFromCauldron } from './getBinaryStoreFromCauldron'
 export { runContainerPipeline } from './runContainerPipeline'
-export {
-  runContainerPipelineForDescriptor,
-} from './runContainerPipelineForDescriptor'
+export { runContainerPipelineForDescriptor } from './runContainerPipelineForDescriptor'
 export {
   alignPackageJsonOnManifest,
   createBranch,

@@ -7,11 +7,11 @@ import {
 } from 'ern-core'
 import { Ensure } from 'ern-orchestrator'
 import fs from 'fs'
+import { KaxTask } from 'kax'
 
 export async function logErrorAndExitIfNotSatisfied({
   noGitOrFilesystemPath,
   noFileSystemPath,
-  isValidContainerVersion,
   isNewerContainerVersion,
   napDescriptorExistInCauldron,
   sameNativeApplicationAndPlatform,
@@ -47,10 +47,6 @@ export async function logErrorAndExitIfNotSatisfied({
   }
   noFileSystemPath?: {
     obj: string | string[]
-    extraErrorMessage?: string
-  }
-  isValidContainerVersion?: {
-    containerVersion: string
     extraErrorMessage?: string
   }
   isNewerContainerVersion?: {
@@ -173,23 +169,11 @@ export async function logErrorAndExitIfNotSatisfied({
     extraErrorMessage?: string
   }
 } = {}) {
-  let kaxTask
+  let kaxTask: KaxTask<void>
   try {
     if (cauldronIsActive) {
       kaxTask = kax.task('Ensuring that a Cauldron is active')
       await Ensure.cauldronIsActive(cauldronIsActive.extraErrorMessage)
-      kaxTask.succeed()
-    }
-    if (isValidContainerVersion) {
-      kaxTask = kax.task(
-        `Ensuring that ${
-          isValidContainerVersion.containerVersion
-        } is a valid Container version`
-      )
-      Ensure.isValidContainerVersion(
-        isValidContainerVersion.containerVersion,
-        isValidContainerVersion.extraErrorMessage
-      )
       kaxTask.succeed()
     }
     if (isNewerContainerVersion) {
@@ -459,7 +443,7 @@ export async function logErrorAndExitIfNotSatisfied({
       kaxTask.succeed()
     }
   } catch (e) {
-    kaxTask.fail()
+    kaxTask!.fail()
     utils.logErrorAndExitProcess(e, 1)
   }
 }

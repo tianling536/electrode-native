@@ -14,6 +14,9 @@ import {
   readPackageJson,
   createTmpDir,
   yarn,
+  BundlingResult,
+  HermesCli,
+  gitApply,
 } from 'ern-core'
 import {
   ContainerGenerator,
@@ -26,17 +29,13 @@ import {
 
 import _ from 'lodash'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs-extra'
 import readDir from 'fs-readdir-recursive'
 import DecompressZip from 'decompress-zip'
 import semver from 'semver'
 
 const PATH_TO_TEMPLATES_DIR = path.join(__dirname, 'templates')
 const PATH_TO_HULL_DIR = path.join(__dirname, 'hull')
-
-const DEFAULT_JSC_VARIANT = 'android-jsc'
-const DEFAULT_JSC_VERSION = '245459'
-const DEFAULT_HERMES_VERSION = '0.2.1'
 
 export interface AndroidDependencies {
   files: string[]
@@ -64,6 +63,7 @@ export default class AndroidGenerator implements ContainerGenerator {
   ): Promise<ContainerGenResult> {
     return generateContainer(config, {
       fillContainerHull: this.fillContainerHull.bind(this),
+      postBundle: this.postBundle.bind(this),
     })
   }
 
@@ -79,7 +79,7 @@ export default class AndroidGenerator implements ContainerGenerator {
 
     const reactNativePlugin = _.find(
       config.plugins,
-      p => p.basePath === 'react-native'
+      p => p.name === 'react-native'
     )
 
     if (!reactNativePlugin) {
@@ -90,9 +90,10 @@ export default class AndroidGenerator implements ContainerGenerator {
     }
 
     let mustacheView: any = {
+      customFeatures: [],
       customPermissions: [],
       customRepos: [],
-      permissions: []
+      permissions: [],
     }
     injectReactNativeVersionKeysInObject(
       mustacheView,
@@ -101,7 +102,7 @@ export default class AndroidGenerator implements ContainerGenerator {
 
     const electrodeBridgePlugin = _.find(
       config.plugins,
-      p => p.basePath === 'react-native-electrode-bridge'
+      p => p.name === 'react-native-electrode-bridge'
     )
 
     if (electrodeBridgePlugin) {
@@ -140,30 +141,22 @@ export default class AndroidGenerator implements ContainerGenerator {
         continue
       }
 
-      if (plugin.basePath === 'react-native') {
+      if (plugin.name === 'react-native') {
         continue
       }
 
       if (!pluginConfig.android) {
         log.warn(
-          `Skipping ${
-            plugin.basePath
-          } as it does not have an Android configuration`
+          `Skipping ${plugin.name} as it does not have an Android configuration`
         )
         continue
       }
 
-      injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${plugin.basePath}]`
+      injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${plugin.name}]`
 
       let pathToPluginProject
 
-      const pluginSourcePath = await config.composite.getNativeDependencyPath(
-        plugin
-      )
-      if (!pluginSourcePath) {
-        throw new Error(`path to ${plugin.basePath} not found in composite`)
-      }
-
+      const pluginSourcePath = plugin.basePath
       if (await coreUtils.isDependencyPathNativeApiImpl(pluginSourcePath)) {
         // For native api implementations, if a 'ern.pluginConfig' object
         // exists in its package.json, replace pluginConfig with this one.
@@ -184,32 +177,21 @@ export default class AndroidGenerator implements ContainerGenerator {
         if (await coreUtils.isDependencyPathNativeApiImpl(pluginSourcePath)) {
           // Special handling for native api implementation as we don't
           // want to copy the API and bridge code (part of native api implementations projects)
-          const relPathToApiImplSource = path.join(
-            'lib',
-            'src',
-            'main',
-            'java',
-            'com',
-            'ern'
+          const relPathToApiImplSource = path.normalize(
+            'lib/src/main/java/com/ern'
           )
           const absPathToCopyPluginSourceTo = path.join(
             config.outDir,
-            'lib',
-            'src',
-            'main',
-            'java',
-            'com'
+            'lib/src/main/java/com'
           )
           shell.cp('-R', relPathToApiImplSource, absPathToCopyPluginSourceTo)
         } else {
           const relPathToPluginSource = pluginConfig.android.moduleName
-            ? path.join(pluginConfig.android.moduleName, 'src', 'main', 'java')
-            : path.join('src', 'main', 'java')
+            ? path.join(pluginConfig.android.moduleName, 'src/main/java')
+            : path.join('src/main/java')
           const absPathToCopyPluginSourceTo = path.join(
             config.outDir,
-            'lib',
-            'src',
-            'main'
+            'lib/src/main'
           )
           shell.cp('-R', relPathToPluginSource, absPathToCopyPluginSourceTo)
         }
@@ -241,6 +223,21 @@ export default class AndroidGenerator implements ContainerGenerator {
             }
           }
 
+          if (pluginConfig.android.applyPatch) {
+            const { patch, root } = pluginConfig.android.applyPatch
+            if (!patch) {
+              throw new Error('Missing "patch" property in "applyPatch" object')
+            }
+            if (!root) {
+              throw new Error('Missing "root" property in "applyPatch" object')
+            }
+            const [patchFile, rootDir] = [
+              path.join(pluginConfig.path, patch),
+              path.join(config.outDir, root),
+            ]
+            await gitApply({ patchFile, rootDir })
+          }
+
           if (pluginConfig.android.dependencies) {
             const transitivePrefix = 'transitive:'
             const filesPrefix = 'files'
@@ -270,6 +267,10 @@ export default class AndroidGenerator implements ContainerGenerator {
             mustacheView.customPermissions.push(
               ...pluginConfig.android.permissions
             )
+          }
+
+          if (pluginConfig.android.features) {
+            mustacheView.customFeatures.push(...pluginConfig.android.features)
           }
         }
       } finally {
@@ -305,15 +306,13 @@ export default class AndroidGenerator implements ContainerGenerator {
       config.outDir,
       f => !f.endsWith('.jar') && !f.endsWith('.aar') && !f.endsWith('.git')
     )
-    const pathLibSrcMain = path.join('lib', 'src', 'main')
-    const pathLibSrcMainJniLibs = path.join('lib', 'src', 'main', 'jniLibs')
-    const pathLibSrcMainAssets = path.join('lib', 'src', 'main', 'assets')
-    const pathLibSrcMainJavaCom = path.join(pathLibSrcMain, 'java', 'com')
+    const pathLibSrcMain = path.normalize('lib/src/main')
+    const pathLibSrcMainJniLibs = path.normalize('lib/src/main/jniLibs')
+    const pathLibSrcMainAssets = path.normalize('lib/src/main/assets')
+    const pathLibSrcMainJavaCom = path.join(pathLibSrcMain, 'java/com')
     const pathLibSrcMainJavaComWalmartlabsErnContainer = path.join(
       pathLibSrcMainJavaCom,
-      'walmartlabs',
-      'ern',
-      'container'
+      'walmartlabs/ern/container'
     )
     for (const file of files) {
       if (
@@ -374,6 +373,27 @@ export default class AndroidGenerator implements ContainerGenerator {
     }
   }
 
+  public async postBundle(
+    config: ContainerGeneratorConfig,
+    bundle: BundlingResult
+  ) {
+    if (this.getJavaScriptEngine(config) === JavaScriptEngine.HERMES) {
+      const hermesVersion =
+        config.androidConfig.hermesVersion || android.DEFAULT_HERMES_VERSION
+      const hermesCli = await kax
+        .task(`Installing hermes-engine@${hermesVersion}`)
+        .run(HermesCli.fromVersion(hermesVersion))
+      await kax.task('Compiling JS bundle to Hermes bytecode').run(
+        hermesCli.compileReleaseBundle({
+          bundleSourceMapPath: bundle.sourceMapPath,
+          compositePath: config.composite.path,
+          jsBundlePath: bundle.bundlePath,
+        })
+      )
+      bundle.isHermesBundle = true
+    }
+  }
+
   public getJavaScriptEngine(
     config: ContainerGeneratorConfig
   ): JavaScriptEngine {
@@ -407,10 +427,10 @@ export default class AndroidGenerator implements ContainerGenerator {
   public async injectJavaScriptCoreEngine(config: ContainerGeneratorConfig) {
     const jscVersion =
       (config.androidConfig && config.androidConfig.jscVersion) ||
-      DEFAULT_JSC_VERSION
+      android.DEFAULT_JSC_VERSION
     const jscVariant =
       (config.androidConfig && config.androidConfig.jscVariant) ||
-      DEFAULT_JSC_VARIANT
+      android.DEFAULT_JSC_VARIANT
     const workingDir = createTmpDir()
     try {
       shell.pushd(workingDir)
@@ -431,7 +451,7 @@ export default class AndroidGenerator implements ContainerGenerator {
           'lib/src/main/jniLibs'
         )
         const unzippedJniPath = path.join(unzipOutDir, 'jni')
-        unzipper.on('error', err => reject(err))
+        unzipper.on('error', (err: any) => reject(err))
         unzipper.on('extract', () => {
           shell.cp('-Rf', unzippedJniPath, containerJniLibsPath)
           resolve()
@@ -450,7 +470,7 @@ export default class AndroidGenerator implements ContainerGenerator {
   public async injectHermesEngine(config: ContainerGeneratorConfig) {
     const hermesVersion =
       (config.androidConfig && config.androidConfig.hermesVersion) ||
-      DEFAULT_HERMES_VERSION
+      android.DEFAULT_HERMES_VERSION
     const workingDir = createTmpDir()
     try {
       shell.pushd(workingDir)
@@ -467,7 +487,7 @@ export default class AndroidGenerator implements ContainerGenerator {
           'lib/src/main/jniLibs'
         )
         const unzippedJniPath = path.join(unzipOutDir, 'jni')
-        unzipper.on('error', err => reject(err))
+        unzipper.on('error', (err: any) => reject(err))
         unzipper.on('extract', () => {
           shell.cp('-Rf', unzippedJniPath, containerJniLibsPath)
           resolve()
@@ -543,7 +563,7 @@ export default class AndroidGenerator implements ContainerGenerator {
     outDir: string
   ): Promise<any> {
     for (const plugin of plugins) {
-      if (plugin.basePath === 'react-native') {
+      if (plugin.name === 'react-native') {
         continue
       }
       const pluginConfig = await manifest.getPluginConfig(plugin)
@@ -552,9 +572,7 @@ export default class AndroidGenerator implements ContainerGenerator {
       }
       if (!pluginConfig.android) {
         log.warn(
-          `Skipping ${
-            plugin.basePath
-          } as it does not have an Android configuration`
+          `Skipping ${plugin.name} as it does not have an Android configuration`
         )
         continue
       }
@@ -570,15 +588,7 @@ export default class AndroidGenerator implements ContainerGenerator {
         )
         const pathToCopyPluginConfigHookTo = path.join(
           outDir,
-          'lib',
-          'src',
-          'main',
-          'java',
-          'com',
-          'walmartlabs',
-          'ern',
-          'container',
-          'plugins'
+          'lib/src/main/java/com/walmartlabs/ern/container/plugins'
         )
         shell.cp(pathToPluginConfigHook, pathToCopyPluginConfigHookTo)
       }
@@ -595,7 +605,7 @@ export default class AndroidGenerator implements ContainerGenerator {
     )
     const reactNativeCodePushPlugin = _.find(
       plugins,
-      p => p.basePath === 'react-native-code-push'
+      p => p.name === 'react-native-code-push'
     )
     if (reactNativeCodePushPlugin) {
       mustacheView.isCodePushPluginIncluded = true

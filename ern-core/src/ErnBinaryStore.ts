@@ -1,15 +1,20 @@
 import { BinaryStore } from './BinaryStore'
 import { AppVersionDescriptor } from './descriptors'
-import { execp } from './childProcess'
 import createTmpDir from './createTmpDir'
-import { spawn } from 'child_process'
 import shell from './shell'
-import fs from 'fs'
+import fs from 'fs-extra'
 import path from 'path'
 import archiver from 'archiver'
 import DecompressZip = require('decompress-zip')
+import got from 'got'
+import FormData from 'form-data'
+import { createProxyAgentFromErnConfig } from './createProxyAgent'
 
 export class ErnBinaryStore implements BinaryStore {
+  public readonly gotCommonOpts = {
+    agent: createProxyAgentFromErnConfig('binaryStoreProxy'),
+  }
+
   private readonly config: any
 
   constructor(config: any) {
@@ -24,11 +29,18 @@ export class ErnBinaryStore implements BinaryStore {
     }: {
       flavor?: string
     } = {}
-  ): Promise<string | Buffer> {
+  ): Promise<void> {
     const pathToBinary = await this.zipBinary(descriptor, binaryPath, {
       flavor,
     })
-    return execp(`curl -XPOST ${this.config.url} -F file=@"${pathToBinary}"`)
+    try {
+      const binaryRs = fs.createReadStream(pathToBinary)
+      const form = new FormData()
+      form.append('file', binaryRs)
+      await got.post(this.config.url, { ...this.gotCommonOpts, body: form })
+    } catch (err) {
+      throw new Error(err.response?.text ?? err.message)
+    }
   }
 
   public async removeBinary(
@@ -38,9 +50,15 @@ export class ErnBinaryStore implements BinaryStore {
     }: {
       flavor?: string
     } = {}
-  ): Promise<string | Buffer> {
+  ): Promise<void> {
     await this.throwIfNoBinaryExistForDescriptor(descriptor, { flavor })
-    return execp(`curl -XDELETE ${this.urlToBinary(descriptor, { flavor })}`)
+    try {
+      await got.delete(this.urlToBinary(descriptor, { flavor }), {
+        ...this.gotCommonOpts,
+      })
+    } catch (err) {
+      throw new Error(err.response?.text ?? err.message)
+    }
   }
 
   public async getBinary(
@@ -57,8 +75,8 @@ export class ErnBinaryStore implements BinaryStore {
     const pathToZippedBinary = await this.getZippedBinary(descriptor, {
       flavor,
     })
-    if (outDir && !fs.existsSync(outDir)) {
-      shell.mkdir('-p', outDir)
+    if (outDir) {
+      await fs.ensureDir(outDir)
     }
     return this.unzipBinary(descriptor, pathToZippedBinary, { flavor, outDir })
   }
@@ -70,13 +88,18 @@ export class ErnBinaryStore implements BinaryStore {
     }: {
       flavor?: string
     } = {}
-  ): Promise<string | Buffer> {
-    return execp(
-      `curl -XOPTIONS -s -o /dev/null -w '%{http_code}' ${this.urlToBinary(
-        descriptor,
-        { flavor }
-      )}`
-    )
+  ): Promise<boolean> {
+    try {
+      const res = await got.head(this.urlToBinary(descriptor, { flavor }), {
+        ...this.gotCommonOpts,
+      })
+      return res.statusCode === 200
+    } catch (err) {
+      if (err.response && err.response.statusCode === 404) {
+        return false
+      }
+      throw new Error(err.response?.text ?? err.message)
+    }
   }
 
   public async getZippedBinary(
@@ -94,10 +117,11 @@ export class ErnBinaryStore implements BinaryStore {
         this.buildZipBinaryFileName(descriptor, { flavor })
       )
       const outputFile = fs.createWriteStream(outputFilePath)
-      const curl = spawn('curl', [this.urlToBinary(descriptor, { flavor })])
-      curl.stdout.pipe(outputFile)
-      outputFile.on('error', err => reject(err))
-      curl.on('close', err => (err ? reject(err) : resolve(outputFilePath)))
+      const gotStream = got
+        .stream(this.urlToBinary(descriptor, { flavor }))
+        .pipe(outputFile)
+      gotStream.on('close', () => resolve(outputFilePath))
+      gotStream.on('error', err => reject(err))
     })
   }
 
@@ -163,7 +187,7 @@ export class ErnBinaryStore implements BinaryStore {
         this.buildNativeBinaryFileName(descriptor, { flavor })
       )
       const unzipper = new DecompressZip(zippedBinaryPath)
-      unzipper.on('error', err => reject(err))
+      unzipper.on('error', (err: any) => reject(err))
       unzipper.on('extract', () => {
         if (descriptor.platform === 'android') {
           shell.mv(path.join(outputDirectory, '*.apk'), pathToOutputBinary)
@@ -216,7 +240,7 @@ export class ErnBinaryStore implements BinaryStore {
       flavor?: string
     } = {}
   ) {
-    if ((await this.hasBinary(descriptor, { flavor })) === '404') {
+    if (!(await this.hasBinary(descriptor, { flavor }))) {
       throw new Error(
         `No binary associated to ${descriptor} ${
           flavor ? `[flavor: ${flavor}]` : ''

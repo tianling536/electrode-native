@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import inquirer from 'inquirer'
 import path from 'path'
 import {
@@ -44,7 +44,7 @@ export default async function generateApiImpl({
   try {
     // get the directory to output the generated project.
     paths.outDirectory = outputDirectory = formOutputDirectoryName(
-      apiImplName,
+      packageName,
       outputDirectory
     )
     await createOutputDirectory(outputDirectory, forceGenerate)
@@ -77,13 +77,15 @@ async function createOutputDirectory(
   outputDirectoryPath: string,
   forceGenerate: boolean
 ) {
-  if (!forceGenerate && fs.existsSync(outputDirectoryPath)) {
-    const { shouldRegenerate } = await inquirer.prompt(<inquirer.Question>{
-      default: false,
-      message: `An implementation directory already exists in ${outputDirectoryPath}. Do you want to delete this and regenerate this project?`,
-      name: 'shouldRegenerate',
-      type: 'confirm',
-    })
+  if (!forceGenerate && (await fs.pathExists(outputDirectoryPath))) {
+    const { shouldRegenerate } = await inquirer.prompt([
+      <inquirer.Question>{
+        default: false,
+        message: `An implementation directory already exists in ${outputDirectoryPath}. Do you want to delete this and regenerate this project?`,
+        name: 'shouldRegenerate',
+        type: 'confirm',
+      },
+    ])
 
     if (!shouldRegenerate) {
       throw Error('An implementation directory already exists')
@@ -92,11 +94,11 @@ async function createOutputDirectory(
     }
   }
 
-  if (forceGenerate && fs.existsSync(outputDirectoryPath)) {
+  if (forceGenerate && (await fs.pathExists(outputDirectoryPath))) {
     log.info(
       `Deleting the existing directory and recreating a new one in ${outputDirectoryPath}`
     )
-    fileUtils.chmodr('777', outputDirectoryPath)
+    fileUtils.chmodr('755', outputDirectoryPath)
     shell.rm('-Rf', outputDirectoryPath)
   } else {
     log.debug(`creating output dir: ${outputDirectoryPath}`)
@@ -125,9 +127,7 @@ async function createNodePackage(
     shell.cp(
       path.join(
         Platform.currentPlatformVersionPath,
-        'ern-api-impl-gen',
-        'resources',
-        'gitignore'
+        'ern-api-impl-gen/resources/gitignore'
       ),
       path.join(outputDirectoryPath, '.gitignore')
     )
@@ -145,13 +145,8 @@ async function createNodePackage(
   }
 }
 
-function formOutputDirectoryName(
-  apiImplName: string,
-  outputDirectoryPath: string
-) {
-  return outputDirectoryPath
-    ? path.join(outputDirectoryPath, apiImplName)
-    : path.join(process.cwd(), apiImplName)
+function formOutputDirectoryName(outputName: string, outputPath: string) {
+  return path.join(outputPath ? outputPath : process.cwd(), outputName)
 }
 
 function getPlatforms(nativeOnly: boolean): string[] {

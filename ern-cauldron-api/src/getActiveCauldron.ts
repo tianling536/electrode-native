@@ -8,8 +8,8 @@ import path from 'path'
 // Singleton CauldronHelper
 // Returns undefined if no Cauldron is active
 // Throw error if Cauldron is not using the correct schema version
-let currentCauldronHelperInstance
-let currentCauldronRepoInUse
+let currentCauldronHelperInstance: CauldronHelper
+let currentCauldronRepoInUse: string
 const ernPlatformUseCmdMsg = 'ern platform use <version> command'
 
 export default async function getActiveCauldron({
@@ -31,10 +31,9 @@ export default async function getActiveCauldron({
   if (!repoInUse && throwIfNoActiveCauldron) {
     throw new Error('No active Cauldron')
   }
-  let kaxTask
+  const kaxTask = kax.task(`Connecting to the Cauldron`)
   try {
     if (repoInUse && repoInUse !== currentCauldronRepoInUse) {
-      kaxTask = kax.task(`Connecting to the Cauldron`)
       const cauldronRepositories = config.get('cauldronRepositories')
       const cauldronRepoUrl = cauldronRepositories[repoInUse]
       const cauldronRepoBranchReResult = /#(.+)$/.exec(cauldronRepoUrl)
@@ -88,21 +87,20 @@ export default async function getActiveCauldron({
           if (!semver.satisfies(Platform.currentVersion, requiredErnVersion)) {
             throw new Error(
               `This Cauldron requires a specific version of Electrode Native to be used.
-                You are currently using Electrode Native version ${
-                  Platform.currentVersion
-                } which does not satisfy version requirement of ${requiredErnVersion}.
+                You are currently using Electrode Native version ${Platform.currentVersion} which does not satisfy version requirement of ${requiredErnVersion}.
                 You should use a version of Electrode Native that satisfies the Cauldron requirement using ${ernPlatformUseCmdMsg} or use a different Cauldron.`
             )
           }
         }
       }
       currentCauldronRepoInUse = repoInUse
-      kaxTask.succeed()
     }
   } catch (e) {
     kaxTask.fail()
     utils.logErrorAndExitProcess(e, 1)
   }
+
+  kaxTask.succeed()
 
   return Promise.resolve(currentCauldronHelperInstance)
 }

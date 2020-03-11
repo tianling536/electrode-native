@@ -1,13 +1,12 @@
 import untildify from 'untildify'
+import { readPackageJsonSync } from './packageJsonFileUtils'
 
 const FILE_PATH_WITH_PREFIX_RE = /^file:(.+)/
 const FILE_PATH_WITHOUT_PREFIX_RE = /^(\/.+)/
 const FILE_PATH_TIDLE_RE = /^(~\/.+)/
 const FILE_PATH_WITHOUT_PREFIX_WINDOWS_RE = /^[a-zA-Z]:\\[\\\S|*\S]?.*$/
 const FILE_PATH_RE = new RegExp(
-  `${FILE_PATH_WITH_PREFIX_RE.source}|${FILE_PATH_WITHOUT_PREFIX_RE.source}|${
-    FILE_PATH_WITHOUT_PREFIX_WINDOWS_RE.source
-  }|${FILE_PATH_TIDLE_RE.source}`
+  `${FILE_PATH_WITH_PREFIX_RE.source}|${FILE_PATH_WITHOUT_PREFIX_RE.source}|${FILE_PATH_WITHOUT_PREFIX_WINDOWS_RE.source}|${FILE_PATH_TIDLE_RE.source}`
 )
 const GIT_SSH_PATH_RE = new RegExp(/^git\+ssh:\/\/.+$/)
 const GIT_SSH_PATH_VERSION_RE = new RegExp(/^(git\+ssh:\/\/.+)#(.+)$/)
@@ -16,11 +15,7 @@ const GIT_HTTPS_PATH_VERSION_RE = new RegExp(/^(https:\/\/.+)#(.+)$/)
 const GITHUB_SSH_PATH_RE = new RegExp(/^git@[^:]+:[^\/]+\/.+\.git$/)
 const GITHUB_SSH_PATH_VERSION_RE = new RegExp(/^git@[^:]+:[^\/]+\/.+\.git#.+$/)
 const GIT_PATH_RE = new RegExp(
-  `${GIT_SSH_PATH_RE.source}|${GIT_SSH_PATH_VERSION_RE.source}|${
-    GIT_HTTPS_PATH_RE.source
-  }|${GIT_HTTPS_PATH_VERSION_RE.source}|${GITHUB_SSH_PATH_VERSION_RE.source}|${
-    GITHUB_SSH_PATH_RE.source
-  }`
+  `${GIT_SSH_PATH_RE.source}|${GIT_SSH_PATH_VERSION_RE.source}|${GIT_HTTPS_PATH_RE.source}|${GIT_HTTPS_PATH_VERSION_RE.source}|${GITHUB_SSH_PATH_VERSION_RE.source}|${GITHUB_SSH_PATH_RE.source}`
 )
 const REGISTRY_PATH_VERSION_RE = new RegExp(/^(.+)@(.+)$/)
 
@@ -48,11 +43,19 @@ export class PackagePath {
 
   /**
    * Version of the package
-   * - File path        : undefined
+   * - File path        : version from package.json
    * - Git path         : branch/tag/commit || undefined
    * - Descriptor path  : package version || undefined
    */
   public readonly version?: string
+
+  /**
+   * Name of the package
+   * - File path        : name from package.json
+   * - Git path         : undefined
+   * - Registry path    : package name
+   */
+  public readonly name?: string
 
   /**
    * Creates a PackagePath
@@ -75,19 +78,27 @@ export class PackagePath {
       this.version = GIT_HTTPS_PATH_VERSION_RE.exec(path)![2]
     } else if (GIT_SSH_PATH_RE.test(path) || GIT_HTTPS_PATH_RE.test(path)) {
       this.basePath = path
-    } else if (REGISTRY_PATH_VERSION_RE.test(path)) {
-      this.basePath = REGISTRY_PATH_VERSION_RE.exec(path)![1]
-      this.version = REGISTRY_PATH_VERSION_RE.exec(path)![2]
     } else if (FILE_PATH_WITH_PREFIX_RE.test(path)) {
       this.basePath = FILE_PATH_WITH_PREFIX_RE.exec(path)![1]
     } else if (FILE_PATH_WITHOUT_PREFIX_RE.test(path)) {
       this.basePath = FILE_PATH_WITHOUT_PREFIX_RE.exec(path)![1]
     } else if (FILE_PATH_TIDLE_RE.test(path)) {
       this.basePath = untildify(FILE_PATH_TIDLE_RE.exec(path)![1])
+    } else if (REGISTRY_PATH_VERSION_RE.test(path)) {
+      this.basePath = REGISTRY_PATH_VERSION_RE.exec(path)![1]
+      this.name = REGISTRY_PATH_VERSION_RE.exec(path)![1]
+      this.version = REGISTRY_PATH_VERSION_RE.exec(path)![2]
     } else {
       this.basePath = path
+      this.name = path
     }
     this.fullPath = path
+
+    if (FILE_PATH_RE.test(this.fullPath)) {
+      const pJson = readPackageJsonSync(this.basePath)
+      this.version = pJson.version
+      this.name = pJson.name
+    }
   }
 
   get isGitPath(): boolean {
