@@ -1,0 +1,16 @@
+{{>licenseInfo}}
+
+import Foundation
+
+{{>generatedCode}}
+
+@objc public class RequestHandlerProvider: NSObject {
+    internal var requestHandlerConfig: RequestHandlerConfig?
+
+    /**
+     * - Parameter config: Optional config object that can be passed to an api impl provider.
+     */
+    init(config: RequestHandlerConfig? = nil) {
+        requestHandlerConfig = config
+    }
+}

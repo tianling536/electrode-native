@@ -105,7 +105,7 @@ NS_ASSUME_NONNULL_BEGIN
                         {{/hasAtleastOneApiImplConfig}}
                         __attribute((deprecated("use -startWithConfigurations:ernDelegate instead")));
 
-+ (void)startWithConfigurations:(id<ElectrodePluginConfig>)reactContainerConfig ernDelegate:(id<ERNDelegate>)ernDelegate
++ (void)startWithConfigurations:(id<ElectrodePluginConfig>)reactContainerConfig ernDelegate:(id<ERNDelegate> _Nullable)ernDelegate
                         {{#plugins}}
                         {{#configurable}}
                         {{{lcname}}}: (id<ElectrodePluginConfig>) {{{lcname}}}
@@ -139,6 +139,19 @@ NS_ASSUME_NONNULL_BEGIN
                      properties:(NSDictionary *_Nullable)properties;
 
 /**
+Returns a react native miniapp (from a JSBundle).
+
+@param name The name of the mini app, preferably the same name as the jsbundle
+without the extension.
+@param overlay Boolean determines if view should be rendered as an overlay.
+@param properties Any configuration to set up the mini app with.
+@return a UIView of the miniapp.
+*/
+- (UIView *)miniAppViewWithName:(NSString *)name
+                     properties:(NSDictionary *_Nullable)properties
+                        overlay:(BOOL)overlay;
+
+/**
  Returns a react native miniapp (from a JSBundle).
 
  @param name The name of the mini app, that is registered with the AppComponent.
@@ -157,7 +170,7 @@ NS_ASSUME_NONNULL_BEGIN
  @param name The name of the mini app, that is registered with the AppComponent.
  @param properties initialprops for a React Native miniapp.
  @param sizeFlexibilty defines size flexibility type of the root view
- @param delegate
+ @param delegate the object to register as the miniapp's delegate.
  @return a UIView of the miniapp.
  */
 - (UIView *)miniAppViewWithName:(NSString *)name

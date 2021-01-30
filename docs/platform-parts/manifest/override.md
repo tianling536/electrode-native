@@ -15,17 +15,17 @@ The following example shows a configuration that includes a partial manifest ove
 "config": {
   "manifest": {
     "override": {
-      "url": "git@github.com:user/ern-custom-manifest.git",
+      "url": "git@github.com:username/ern-custom-manifest.git",
       "type": "partial"
     }
   }
 }
 ```
 
-The configuration object should be **manually added to your cauldron** at the same level as the `nativeApps` array.  
+The configuration object should be **manually added to your cauldron** at the same level as the `nativeApps` array.
 
-* The `override url` is the url of the GitHub repository containing your own Manifest  
-* The `override type` value can be either partial or full. For most use cases you'll use the partial; full can be useful in rare cases.
+- The `override url` is the url of the GitHub repository containing your own Manifest
+- The `override type` value can be either partial or full. For most use cases you'll use the partial; full can be useful in rare cases.
 
 #### Partial override
 
@@ -35,7 +35,7 @@ For plugins (native modules) configurations using the partial override type, Ele
 
 #### Full override
 
-For dependencies or plugin configurations, a full override means that Electrode Native only queries the override manifest. The master manifest is never used. A full override  completely masks the master manifest.
+For dependencies or plugin configurations, a full override means that Electrode Native only queries the override manifest. The master manifest is never used. A full override completely masks the master manifest.
 
 #### manifest.json document
 
@@ -51,28 +51,24 @@ The new `manifest.json` document associate a `manifest id` (manifest object key)
     "targetNativeDependencies": [
       "react-native@0.59.4",
       "react-native-electrode-bridge@1.5.17",
-      "react-native-maps@0.23.0",
+      "react-native-maps@0.23.0"
     ],
-    "targetJsDependencies": [
-      "react@16.8.3"
-    ]
+    "targetJsDependencies": ["react@16.8.3"]
   },
   "next": {
-     "targetNativeDependencies": [
+    "targetNativeDependencies": [
       "react-native@0.60.0",
       "react-native-electrode-bridge@1.5.18",
-      "react-native-maps@0.24.0",
+      "react-native-maps@0.24.0"
     ],
-    "targetJsDependencies": [
-      "react@17.0.0"
-    ]
+    "targetJsDependencies": ["react@17.0.0"]
   }
 }
 ```
 
-The `default` manifest id will be picked up automatically, unless a different `manifest id` is explicitely provided to some `ern` commands that are accessing the manifest.
+The `default` manifest id will be picked up automatically, unless a different `manifest id` is explicitly provided to some `ern` commands that are accessing the manifest.
 
-For example, you might want to define a `next` manifest id with upgraded dependencies versions, and from a specific branch of your MiniApps you can then run `ern ugprade-miniapp --manifestId next` which will upgrade the MiniApp dependencies to the versions specified in the `next` manifest entry, while your main development MiniApp branches can continue tracking the `default` Manifest entry. This was not possible previously due to the fact that Manifest entries had a one to one mapping to a specific platform version.
+For example, you might want to define a `next` manifest id with upgraded dependencies versions, and from a specific branch of your MiniApps you can then run `ern upgrade-miniapp --manifestId next` which will upgrade the MiniApp dependencies to the versions specified in the `next` manifest entry, while your main MiniApp branches can continue tracking the `default` Manifest entry. This was not possible previously due to the fact that Manifest entries had a one to one mapping to a specific platform version.
 
 #### Guidelines for overriding Manifest use cases
 

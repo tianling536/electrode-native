@@ -22,6 +22,7 @@
 #import "ElectrodeEventRegistrar.h"
 #import "ElectrodeRequestRegistrar.h"
 #import "ElectrodeLogger.h"
+#import "ElectrodeBridgeHolder.h"
 
 #if __has_include(<React/RCTLog.h>)
 #import <React/RCTLog.h>
@@ -376,18 +377,18 @@ createTransactionWithRequest:(ElectrodeBridgeRequest *)request
                          @"always be set for a local transaction"];
     } else {
       if (response.failureMessage != nil) {
-
-        ERNDebug(@"Completing transaction by issuing a failure call back to "
-                 @"local response listener");
-        dispatch_async(dispatch_get_main_queue(), ^{
-          transaction.completion(nil, response.failureMessage);
-        });
+          ERNDebug(@"Completing transaction by issuing a failure call back to "
+                   @"local response listener");
+          ElectrodeBridgeFailureMessage *failureMessage = response.failureMessage;
+          dispatch_async(dispatch_get_main_queue(), ^{
+              transaction.completion(nil, failureMessage);
+          });
       } else {
-        ERNDebug(@"Completing transaction by issuing a success call back to "
-                 @"local response listener");
-        dispatch_async(dispatch_get_main_queue(), ^{
-          transaction.completion(response.data, nil);
-        });
+          ERNDebug(@"Completing transaction by issuing a success call back to "
+                   @"local response listener");
+          dispatch_async(dispatch_get_main_queue(), ^{
+              transaction.completion(response.data, nil);
+          });
       }
     }
   }
@@ -435,6 +436,10 @@ createTransactionWithRequest:(ElectrodeBridgeRequest *)request
   if (reactNativeTransceiver) {
     reactNativeTransceiver(self);
   }
+}
+
+- (void)startObserving {
+    [[NSNotificationCenter defaultCenter] postNotificationName:ElectrodeBridgeDidStartObservingNotification object:self];
 }
 
 @end

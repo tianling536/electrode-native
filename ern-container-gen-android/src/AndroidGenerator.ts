@@ -1,47 +1,49 @@
 import {
-  manifest,
-  handleCopyDirective,
-  utils as coreUtils,
-  mustacheUtils,
-  PackagePath,
-  shell,
-  injectReactNativeVersionKeysInObject,
-  log,
-  NativePlatform,
-  kax,
   android,
   AndroidResolvedVersions,
-  readPackageJson,
-  createTmpDir,
-  yarn,
   BundlingResult,
-  HermesCli,
+  createTmpDir,
   gitApply,
-} from 'ern-core'
+  handleCopyDirective,
+  HermesCli,
+  injectReactNativeVersionKeysInObject,
+  kax,
+  log,
+  manifest,
+  mustacheUtils,
+  NativePlatform,
+  PackagePath,
+  PluginConfig,
+  readPackageJson,
+  shell,
+  utils as coreUtils,
+  yarn,
+} from 'ern-core';
 import {
   ContainerGenerator,
   ContainerGeneratorConfig,
   ContainerGenResult,
+  generateContainer,
   generatePluginsMustacheViews,
   populateApiImplMustacheView,
-  generateContainer,
-} from 'ern-container-gen'
+} from 'ern-container-gen';
 
-import _ from 'lodash'
-import path from 'path'
-import fs from 'fs-extra'
-import readDir from 'fs-readdir-recursive'
-import DecompressZip from 'decompress-zip'
-import semver from 'semver'
+import _ from 'lodash';
+import path from 'path';
+import fs from 'fs-extra';
+import readDir from 'fs-readdir-recursive';
+import DecompressZip from 'decompress-zip';
+import semver from 'semver';
 
-const PATH_TO_TEMPLATES_DIR = path.join(__dirname, 'templates')
-const PATH_TO_HULL_DIR = path.join(__dirname, 'hull')
+const PATH_TO_TEMPLATES_DIR = path.join(__dirname, 'templates');
+const PATH_TO_HULL_DIR = path.join(__dirname, 'hull');
 
 export interface AndroidDependencies {
-  files: string[]
-  transitive: string[]
-  regular: string[]
-  annotationProcessor: string[]
+  files: string[];
+  transitive: string[];
+  raw: string[];
+  regular: string[];
+  annotationProcessor: string[];
 }
 
 export enum JavaScriptEngine {
@@ -51,42 +53,42 @@ export enum JavaScriptEngine {
 
 export default class AndroidGenerator implements ContainerGenerator {
   get name(): string {
-    return 'AndroidGenerator'
+    return 'AndroidGenerator';
   }
 
   get platform(): NativePlatform {
-    return 'android'
+    return 'android';
   }
 
   public async generate(
-    config: ContainerGeneratorConfig
+    config: ContainerGeneratorConfig,
   ): Promise<ContainerGenResult> {
     return generateContainer(config, {
       fillContainerHull: this.fillContainerHull.bind(this),
       postBundle: this.postBundle.bind(this),
-    })
+    });
   }
 
   public async fillContainerHull(
-    config: ContainerGeneratorConfig
+    config: ContainerGeneratorConfig,
   ): Promise<void> {
-    const copyFromPath = path.join(PATH_TO_HULL_DIR, '{.*,*}')
+    const copyFromPath = path.join(PATH_TO_HULL_DIR, '{.*,*}');
 
-    shell.cp('-R', copyFromPath, config.outDir)
+    shell.cp('-R', copyFromPath, config.outDir);
 
-    // https://github.com/npm/npm/issues/1862 : Npm renames .gitigonre to .npmignore causing the generated contaier to emit the .gitnore file. This solution below helps to bypass it.
-    shell.mv(`${config.outDir}/gitignore`, `${config.outDir}/.gitignore`)
+    // https://github.com/npm/npm/issues/1862 npm renames .gitignore to .npmignore causing the generated container to emit the .gitignore file. This solution below helps to bypass it.
+    shell.mv(`${config.outDir}/gitignore`, `${config.outDir}/.gitignore`);
 
     const reactNativePlugin = _.find(
       config.plugins,
-      p => p.name === 'react-native'
-    )
+      (p) => p.name === 'react-native',
+    );
 
     if (!reactNativePlugin) {
-      throw new Error('react-native was not found in plugins list !')
+      throw new Error('react-native was not found in plugins list !');
     }
     if (!reactNativePlugin.version) {
-      throw new Error('react-native plugin does not have a version !')
+      throw new Error('react-native plugin does not have a version !');
     }
 
     let mustacheView: any = {
@@ -94,226 +96,254 @@ export default class AndroidGenerator implements ContainerGenerator {
       customPermissions: [],
       customRepos: [],
       permissions: [],
-    }
+    };
     injectReactNativeVersionKeysInObject(
       mustacheView,
-      reactNativePlugin.version
-    )
+      reactNativePlugin.version,
+    );
 
     const electrodeBridgePlugin = _.find(
       config.plugins,
-      p => p.name === 'react-native-electrode-bridge'
-    )
+      (p) => p.name === 'react-native-electrode-bridge',
+    );
 
     if (electrodeBridgePlugin) {
-      mustacheView.hasElectrodeBridgePlugin = true
+      mustacheView.hasElectrodeBridgePlugin = true;
     }
 
-    mustacheView.miniApps = config.composite.getMiniApps()
-    mustacheView.jsMainModuleName = config.jsMainModuleName || 'index'
+    mustacheView.miniApps = await config.composite.getMiniApps();
+    mustacheView.jsMainModuleName = config.jsMainModuleName || 'index';
 
     await kax
       .task('Preparing Native Dependencies Injection')
-      .run(this.buildAndroidPluginsViews(config.plugins, mustacheView))
+      .run(this.buildAndroidPluginsViews(config.plugins, mustacheView));
 
     await kax
       .task('Adding Native Dependencies Hooks')
-      .run(this.addAndroidPluginHookClasses(config.plugins, config.outDir))
+      .run(this.addAndroidPluginHookClasses(config.plugins, config.outDir));
 
-    kax.info('Setting Android tools and libraries versions')
-    const versions = android.resolveAndroidVersions(config.androidConfig)
-    mustacheView = Object.assign(mustacheView, versions)
+    kax.task('Setting Android tools and libraries versions').succeed();
+    const versions = android.resolveAndroidVersions(config.androidConfig);
+    mustacheView = Object.assign(mustacheView, versions);
 
-    const injectPluginsTaskMsg = 'Injecting Native Dependencies'
-    const injectPluginsKaxTask = kax.task(injectPluginsTaskMsg)
+    const injectPluginsTaskMsg = 'Injecting Native Dependencies';
+    const injectPluginsKaxTask = kax.task(injectPluginsTaskMsg);
 
-    const replacements: Array<() => void> = []
-    const dependencies: AndroidDependencies = {
+    const replacements: Array<() => void> = [];
+    const androidDependencies: AndroidDependencies = {
       annotationProcessor: [],
       files: [],
+      raw: [],
       regular: [],
       transitive: [],
-    }
+    };
 
     for (const plugin of config.plugins) {
-      let pluginConfig: any = await manifest.getPluginConfig(plugin)
-      if (!pluginConfig) {
-        continue
-      }
-
       if (plugin.name === 'react-native') {
-        continue
+        continue;
       }
 
-      if (!pluginConfig.android) {
+      let pluginConfig:
+        | PluginConfig<'android'>
+        | undefined = await manifest.getPluginConfig(plugin, 'android');
+      if (!pluginConfig) {
         log.warn(
-          `Skipping ${plugin.name} as it does not have an Android configuration`
-        )
-        continue
+          `Skipping ${plugin.name} as it does not have an Android configuration`,
+        );
+        continue;
       }
 
-      injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${plugin.name}]`
+      injectPluginsKaxTask.text = `${injectPluginsTaskMsg} [${plugin.name}]`;
 
-      let pathToPluginProject
+      let pathToPluginProject;
 
-      const pluginSourcePath = plugin.basePath
+      const pluginSourcePath = plugin.basePath;
       if (await coreUtils.isDependencyPathNativeApiImpl(pluginSourcePath)) {
         // For native api implementations, if a 'ern.pluginConfig' object
         // exists in its package.json, replace pluginConfig with this one.
-        const pluginPackageJson = await readPackageJson(pluginSourcePath)
+        const pluginPackageJson = await readPackageJson(pluginSourcePath);
         if (pluginPackageJson.ern.pluginConfig) {
-          pluginConfig = pluginPackageJson.ern.pluginConfig
+          pluginConfig = pluginPackageJson.ern.pluginConfig.android;
         }
-        populateApiImplMustacheView(pluginSourcePath, mustacheView, true)
+        populateApiImplMustacheView(pluginSourcePath, mustacheView, true);
       }
+      pathToPluginProject = path.join(pluginSourcePath, pluginConfig!.root);
 
-      pathToPluginProject = path.join(
-        pluginSourcePath,
-        pluginConfig.android.root
-      )
-
-      shell.pushd(pathToPluginProject)
+      shell.pushd(pathToPluginProject);
       try {
         if (await coreUtils.isDependencyPathNativeApiImpl(pluginSourcePath)) {
           // Special handling for native api implementation as we don't
           // want to copy the API and bridge code (part of native api implementations projects)
           const relPathToApiImplSource = path.normalize(
-            'lib/src/main/java/com/ern'
-          )
+            'lib/src/main/java/com/ern',
+          );
           const absPathToCopyPluginSourceTo = path.join(
             config.outDir,
-            'lib/src/main/java/com'
-          )
-          shell.cp('-R', relPathToApiImplSource, absPathToCopyPluginSourceTo)
+            'lib/src/main/java/com',
+          );
+          shell.cp('-R', relPathToApiImplSource, absPathToCopyPluginSourceTo);
         } else {
-          const relPathToPluginSource = pluginConfig.android.moduleName
-            ? path.join(pluginConfig.android.moduleName, 'src/main/java')
-            : path.join('src/main/java')
+          const relPathToPluginSource = pluginConfig!.moduleName
+            ? path.join(pluginConfig!.moduleName, 'src/main/java')
+            : path.join('src/main/java');
           const absPathToCopyPluginSourceTo = path.join(
             config.outDir,
-            'lib/src/main'
-          )
-          shell.cp('-R', relPathToPluginSource, absPathToCopyPluginSourceTo)
+            'lib/src/main',
+          );
+          shell.cp('-R', relPathToPluginSource, absPathToCopyPluginSourceTo);
         }
 
-        if (pluginConfig.android) {
-          if (pluginConfig.android.copy) {
-            handleCopyDirective(
-              pluginSourcePath,
-              config.outDir,
-              pluginConfig.android.copy
-            )
-          }
+        const {
+          applyPatch,
+          copy,
+          dependencies,
+          features,
+          permissions,
+          replaceInFile,
+          repositories,
+        } = pluginConfig!;
 
-          const { replaceInFile } = pluginConfig.android
-          if (replaceInFile && Array.isArray(replaceInFile)) {
-            for (const r of replaceInFile) {
-              replacements.push(() => {
-                log.debug(`Performing string replacement on ${r.path}`)
-                const pathToFile = path.join(config.outDir, r.path)
-                const fileContent = fs.readFileSync(pathToFile, 'utf8')
-                const patchedFileContent = fileContent.replace(
-                  RegExp(r.string, 'g'),
-                  r.replaceWith
-                )
-                fs.writeFileSync(pathToFile, patchedFileContent, {
-                  encoding: 'utf8',
-                })
-              })
+        if (copy) {
+          handleCopyDirective(pluginSourcePath, config.outDir, copy);
+        }
+
+        if (replaceInFile && Array.isArray(replaceInFile)) {
+          for (const r of replaceInFile) {
+            replacements.push(() => {
+              log.debug(`Performing string replacement on ${r.path}`);
+              const pathToFile = path.join(config.outDir, r.path);
+              const fileContent = fs.readFileSync(pathToFile, 'utf8');
+              const patchedFileContent = fileContent.replace(
+                RegExp(r.string, 'g'),
+                r.replaceWith,
+              );
+              fs.writeFileSync(pathToFile, patchedFileContent, {
+                encoding: 'utf8',
+              });
+            });
+          }
+        }
+
+        if (applyPatch) {
+          const { patch, root } = applyPatch;
+          if (!patch) {
+            throw new Error('Missing "patch" property in "applyPatch" object');
+          }
+          if (!root) {
+            throw new Error('Missing "root" property in "applyPatch" object');
+          }
+          const [patchFile, rootDir] = [
+            path.join(pluginConfig!.path!, patch),
+            path.join(config.outDir, root),
+          ];
+          await gitApply({ patchFile, rootDir });
+        }
+
+        if (dependencies) {
+          const transitivePrefix = 'transitive:';
+          const filesPrefix = 'files';
+          const annotationProcessorPrefix = 'annotationProcessor:';
+          for (const dependency of dependencies) {
+            if (dependency.startsWith(transitivePrefix)) {
+              androidDependencies.transitive.push(
+                dependency.replace(transitivePrefix, ''),
+              );
+              log.warn(
+                `Deprecation warning for ${plugin.name} manifest configuration.
+${transitivePrefix} dependency prefix has been deprecated and will be removed in a future release.
+You should replace "${transitivePrefix}:${dependency}" with "implementation ('${dependency}') { transitive = true }"`,
+              );
+            } else if (dependency.startsWith(filesPrefix)) {
+              androidDependencies.files.push(dependency);
+              log.warn(
+                `Deprecation warning for ${plugin.name} manifest configuration.
+${filesPrefix} dependency prefix has been deprecated and will be removed in a future release.
+You should replace "${dependency}" with "implementation ${dependency}"`,
+              );
+            } else if (dependency.startsWith(annotationProcessorPrefix)) {
+              androidDependencies.annotationProcessor.push(
+                dependency.replace(annotationProcessorPrefix, ''),
+              );
+              log.warn(
+                `Deprecation warning for ${plugin.name} manifest configuration.
+${annotationProcessorPrefix} dependency prefix has been deprecated and will be removed in a future release.
+You should replace "${annotationProcessorPrefix}:${dependency}" with "annotationProcessor '${dependency}'"`,
+              );
+            } else if (/^[^:]+:[^:]+:[^:]+$/.test(dependency)) {
+              androidDependencies.regular.push(dependency);
+            } else {
+              androidDependencies.raw.push(dependency);
             }
           }
+        }
 
-          if (pluginConfig.android.applyPatch) {
-            const { patch, root } = pluginConfig.android.applyPatch
-            if (!patch) {
-              throw new Error('Missing "patch" property in "applyPatch" object')
-            }
-            if (!root) {
-              throw new Error('Missing "root" property in "applyPatch" object')
-            }
-            const [patchFile, rootDir] = [
-              path.join(pluginConfig.path, patch),
-              path.join(config.outDir, root),
-            ]
-            await gitApply({ patchFile, rootDir })
-          }
+        if (repositories) {
+          mustacheView.customRepos.push(...repositories);
+        }
 
-          if (pluginConfig.android.dependencies) {
-            const transitivePrefix = 'transitive:'
-            const filesPrefix = 'files'
-            const annotationProcessorPrefix = 'annotationProcessor:'
-            for (const dependency of pluginConfig.android.dependencies) {
-              if (dependency.startsWith(transitivePrefix)) {
-                dependencies.transitive.push(
-                  dependency.replace(transitivePrefix, '')
-                )
-              } else if (dependency.startsWith(filesPrefix)) {
-                dependencies.files.push(dependency)
-              } else if (dependency.startsWith(annotationProcessorPrefix)) {
-                dependencies.annotationProcessor.push(
-                  dependency.replace(annotationProcessorPrefix, '')
-                )
-              } else {
-                dependencies.regular.push(dependency)
-              }
-            }
-          }
+        if (permissions) {
+          mustacheView.customPermissions.push(...permissions);
+        }
 
-          if (pluginConfig.android.repositories) {
-            mustacheView.customRepos.push(...pluginConfig.android.repositories)
-          }
-
-          if (pluginConfig.android.permissions) {
-            mustacheView.customPermissions.push(
-              ...pluginConfig.android.permissions
-            )
-          }
-
-          if (pluginConfig.android.features) {
-            mustacheView.customFeatures.push(...pluginConfig.android.features)
-          }
+        if (features) {
+          mustacheView.customFeatures.push(...features);
         }
       } finally {
-        shell.popd()
+        shell.popd();
       }
     }
 
-    // Dedupe repositories and permissions
-    mustacheView.customRepos = _.uniq(mustacheView.customRepos)
-    mustacheView.customPermissions = _.uniq(mustacheView.customPermissions)
+    const resPath = path.join(config.outDir, 'lib/src/main/res');
+    const resSrcDirs = fs
+      .readdirSync(resPath)
+      .filter((f) => fs.statSync(path.join(resPath, f)).isDirectory())
+      .map((d) => `'src/main/res/${d}'`)
+      .join(',');
+    mustacheView.resSrcDirs = resSrcDirs;
 
-    dependencies.regular.push(
-      `com.walmartlabs.ern:react-native:${reactNativePlugin.version}`
-    )
-    dependencies.regular.push(
-      `com.android.support:appcompat-v7:${versions.supportLibraryVersion}`
-    )
+    // Dedupe repositories and permissions
+    mustacheView.customRepos = _.uniq(mustacheView.customRepos);
+    mustacheView.customPermissions = _.uniq(mustacheView.customPermissions);
+
+    androidDependencies.regular.push(
+      `com.walmartlabs.ern:react-native:${reactNativePlugin.version}`,
+    );
+    androidDependencies.regular.push(
+      `com.android.support:appcompat-v7:${versions.supportLibraryVersion}`,
+    );
     mustacheView.implementations = this.buildImplementationStatements(
-      dependencies,
-      versions
-    )
+      androidDependencies,
+      versions,
+    );
 
     log.debug(
       `Implementation statements to be injected: ${JSON.stringify(
-        mustacheView.implementations
-      )}`
-    )
+        mustacheView.implementations,
+      )}`,
+    );
 
-    injectPluginsKaxTask.succeed(injectPluginsTaskMsg)
+    injectPluginsKaxTask.succeed(injectPluginsTaskMsg);
 
-    log.debug('Patching hull')
+    const partialProxy = (name: string) => {
+      return fs.readFileSync(
+        path.join(PATH_TO_TEMPLATES_DIR, `${name}.mustache`),
+        'utf8',
+      );
+    };
+
+    log.debug('Patching hull');
     const files = readDir(
       config.outDir,
-      f => !f.endsWith('.jar') && !f.endsWith('.aar') && !f.endsWith('.git')
-    )
-    const pathLibSrcMain = path.normalize('lib/src/main')
-    const pathLibSrcMainJniLibs = path.normalize('lib/src/main/jniLibs')
-    const pathLibSrcMainAssets = path.normalize('lib/src/main/assets')
-    const pathLibSrcMainJavaCom = path.join(pathLibSrcMain, 'java/com')
+      (f) => !f.endsWith('.jar') && !f.endsWith('.aar') && !f.endsWith('.git'),
+    );
+    const pathLibSrcMain = path.normalize('lib/src/main');
+    const pathLibSrcMainJniLibs = path.normalize('lib/src/main/jniLibs');
+    const pathLibSrcMainAssets = path.normalize('lib/src/main/assets');
+    const pathLibSrcMainJavaCom = path.join(pathLibSrcMain, 'java/com');
     const pathLibSrcMainJavaComWalmartlabsErnContainer = path.join(
       pathLibSrcMainJavaCom,
-      'walmartlabs/ern/container'
-    )
+      'walmartlabs/ern/container',
+    );
     for (const file of files) {
       if (
         (file.startsWith(pathLibSrcMainJavaCom) &&
@@ -324,78 +354,87 @@ export default class AndroidGenerator implements ContainerGenerator {
         // We don't want to Mustache process library files. It can lead to bad things
         // We also don't want to process assets files ...
         // We just want to process container specific code (which contains mustache templates)
-        log.debug(`Skipping mustaching of ${file}`)
-        continue
+        continue;
       }
-      log.debug(`Mustaching ${file}`)
-      const pathToFile = path.join(config.outDir, file)
+      log.debug(`Mustaching ${file}`);
+      const pathToFile = path.join(config.outDir, file);
       await mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
         pathToFile,
         mustacheView,
-        pathToFile
-      )
+        pathToFile,
+        partialProxy,
+      );
     }
 
-    log.debug('Creating miniapp activities')
-    for (const miniApp of config.composite.getMiniApps()) {
-      const activityFileName = `${miniApp.pascalCaseName}Activity.java`
+    log.debug('Creating miniapp activities');
+    const compositeMiniApps = await config.composite.getMiniApps();
+    for (const miniApp of compositeMiniApps) {
+      const activityFileName = `${miniApp.pascalCaseName}Activity.java`;
 
-      log.debug(`Creating ${activityFileName}`)
+      log.debug(`Creating ${activityFileName}`);
       const pathToMiniAppActivityMustacheTemplate = path.join(
         PATH_TO_TEMPLATES_DIR,
-        'MiniAppActivity.mustache'
-      )
+        'MiniAppActivity.mustache',
+      );
       const pathToOutputActivityFile = path.join(
         config.outDir,
         pathLibSrcMainJavaComWalmartlabsErnContainer,
         'miniapps',
-        activityFileName
-      )
+        activityFileName,
+      );
       await mustacheUtils.mustacheRenderToOutputFileUsingTemplateFile(
         pathToMiniAppActivityMustacheTemplate,
         miniApp,
-        pathToOutputActivityFile
-      )
+        pathToOutputActivityFile,
+        partialProxy,
+      );
     }
 
     for (const perform of replacements) {
-      perform()
+      perform();
     }
 
     if (semver.gte(reactNativePlugin.version, '0.60.0')) {
       this.getJavaScriptEngine(config) === JavaScriptEngine.JSC
         ? await kax
             .task('Injecting JavaScript engine [JavaScriptCore]')
-            .run(this.injectJavaScriptCoreEngine(config))
+            .run(
+              this.injectJavaScriptCoreEngine(
+                config,
+                reactNativePlugin.version,
+              ),
+            )
         : await kax
             .task('Injecting JavaScript engine [Hermes]')
-            .run(this.injectHermesEngine(config))
+            .run(this.injectHermesEngine(config, reactNativePlugin.version));
     }
   }
 
   public async postBundle(
     config: ContainerGeneratorConfig,
-    bundle: BundlingResult
+    bundle: BundlingResult,
+    reactNativeVersion: string,
   ) {
     if (this.getJavaScriptEngine(config) === JavaScriptEngine.HERMES) {
       const hermesVersion =
-        config.androidConfig.hermesVersion || android.DEFAULT_HERMES_VERSION
+        config.androidConfig.hermesVersion ||
+        android.getDefaultHermesVersion(reactNativeVersion);
       const hermesCli = await kax
         .task(`Installing hermes-engine@${hermesVersion}`)
-        .run(HermesCli.fromVersion(hermesVersion))
+        .run(HermesCli.fromVersion(hermesVersion));
       await kax.task('Compiling JS bundle to Hermes bytecode').run(
         hermesCli.compileReleaseBundle({
           bundleSourceMapPath: bundle.sourceMapPath,
           compositePath: config.composite.path,
           jsBundlePath: bundle.bundlePath,
-        })
-      )
-      bundle.isHermesBundle = true
+        }),
+      );
+      bundle.isHermesBundle = true;
     }
   }
 
   public getJavaScriptEngine(
-    config: ContainerGeneratorConfig
+    config: ContainerGeneratorConfig,
   ): JavaScriptEngine {
     return config.androidConfig
       ? config.androidConfig.jsEngine === 'jsc'
@@ -403,7 +442,7 @@ export default class AndroidGenerator implements ContainerGenerator {
         : config.androidConfig.jsEngine === 'hermes'
         ? JavaScriptEngine.HERMES
         : JavaScriptEngine.JSC
-      : JavaScriptEngine.JSC
+      : JavaScriptEngine.JSC;
   }
 
   /**
@@ -424,42 +463,52 @@ export default class AndroidGenerator implements ContainerGenerator {
    * Container. This way, the JSC engine is shipped within the Container and
    * applications won't crash at runtime when trying to load this library.
    */
-  public async injectJavaScriptCoreEngine(config: ContainerGeneratorConfig) {
-    const jscVersion =
+  public async injectJavaScriptCoreEngine(
+    config: ContainerGeneratorConfig,
+    reactNativeVersion: string,
+  ) {
+    let jscVersion =
       (config.androidConfig && config.androidConfig.jscVersion) ||
-      android.DEFAULT_JSC_VERSION
+      android.getDefaultJSCVersion(reactNativeVersion);
+    if (/^\d+$/.test(jscVersion)) {
+      // For backward compatibility, to avoid breaking clients
+      // that are already providing a version through config that
+      // only specifies major excluding minor/patch
+      jscVersion = `${jscVersion}.0.0`;
+    }
     const jscVariant =
       (config.androidConfig && config.androidConfig.jscVariant) ||
-      android.DEFAULT_JSC_VARIANT
-    const workingDir = createTmpDir()
+      android.DEFAULT_JSC_VARIANT;
+    const workingDir = createTmpDir();
     try {
-      shell.pushd(workingDir)
-      await yarn.init()
-      await yarn.add(PackagePath.fromString(`jsc-android@${jscVersion}.0.0`))
+      shell.pushd(workingDir);
+      await yarn.init();
+      await yarn.add(PackagePath.fromString(`jsc-android@${jscVersion}`));
+      const versionMajor = semver.major(semver.coerce(jscVersion)!.version);
       const jscVersionPath = path.resolve(
-        `./node_modules/jsc-android/dist/org/webkit/${jscVariant}/r${jscVersion}`
-      )
+        `./node_modules/jsc-android/dist/org/webkit/${jscVariant}/r${versionMajor}`,
+      );
       const jscAARPath = path.join(
         jscVersionPath,
-        `${jscVariant}-r${jscVersion}.aar`
-      )
+        `${jscVariant}-r${versionMajor}.aar`,
+      );
       return new Promise((resolve, reject) => {
-        const unzipper = new DecompressZip(jscAARPath)
-        const unzipOutDir = createTmpDir()
+        const unzipper = new DecompressZip(jscAARPath);
+        const unzipOutDir = createTmpDir();
         const containerJniLibsPath = path.join(
           config.outDir,
-          'lib/src/main/jniLibs'
-        )
-        const unzippedJniPath = path.join(unzipOutDir, 'jni')
-        unzipper.on('error', (err: any) => reject(err))
+          'lib/src/main/jniLibs',
+        );
+        const unzippedJniPath = path.join(unzipOutDir, 'jni');
+        unzipper.on('error', (err: any) => reject(err));
         unzipper.on('extract', () => {
-          shell.cp('-Rf', unzippedJniPath, containerJniLibsPath)
-          resolve()
-        })
-        unzipper.extract({ path: unzipOutDir })
-      })
+          shell.cp('-Rf', unzippedJniPath, containerJniLibsPath);
+          resolve();
+        });
+        unzipper.extract({ path: unzipOutDir });
+      });
     } finally {
-      shell.popd()
+      shell.popd();
     }
   }
 
@@ -467,148 +516,158 @@ export default class AndroidGenerator implements ContainerGenerator {
    * Inject hermes engine into the Container
    * Done in a similar way as injectJavaScriptCoreEngine method
    */
-  public async injectHermesEngine(config: ContainerGeneratorConfig) {
+  public async injectHermesEngine(
+    config: ContainerGeneratorConfig,
+    reactNativeVersion: string,
+  ) {
     const hermesVersion =
       (config.androidConfig && config.androidConfig.hermesVersion) ||
-      android.DEFAULT_HERMES_VERSION
-    const workingDir = createTmpDir()
+      android.getDefaultHermesVersion(reactNativeVersion);
+    const workingDir = createTmpDir();
     try {
-      shell.pushd(workingDir)
-      await yarn.init()
-      await yarn.add(PackagePath.fromString(`hermes-engine@${hermesVersion}`))
+      shell.pushd(workingDir);
+      await yarn.init();
+      await yarn.add(PackagePath.fromString(`hermes-engine@${hermesVersion}`));
       const hermesAarPath = path.resolve(
-        `./node_modules/hermes-engine/android/hermes-release.aar`
-      )
+        `./node_modules/hermes-engine/android/hermes-release.aar`,
+      );
       return new Promise((resolve, reject) => {
-        const unzipper = new DecompressZip(hermesAarPath)
-        const unzipOutDir = createTmpDir()
+        const unzipper = new DecompressZip(hermesAarPath);
+        const unzipOutDir = createTmpDir();
         const containerJniLibsPath = path.join(
           config.outDir,
-          'lib/src/main/jniLibs'
-        )
-        const unzippedJniPath = path.join(unzipOutDir, 'jni')
-        unzipper.on('error', (err: any) => reject(err))
+          'lib/src/main/jniLibs',
+        );
+        const unzippedJniPath = path.join(unzipOutDir, 'jni');
+        unzipper.on('error', (err: any) => reject(err));
         unzipper.on('extract', () => {
-          shell.cp('-Rf', unzippedJniPath, containerJniLibsPath)
-          resolve()
-        })
-        unzipper.extract({ path: unzipOutDir })
-      })
+          shell.cp('-Rf', unzippedJniPath, containerJniLibsPath);
+          resolve();
+        });
+        unzipper.extract({ path: unzipOutDir });
+      });
     } finally {
-      shell.popd()
+      shell.popd();
     }
   }
 
   public buildImplementationStatements(
     dependencies: AndroidDependencies,
-    androidVersions: AndroidResolvedVersions
+    androidVersions: AndroidResolvedVersions,
   ) {
-    const result: any[] = []
+    const result: any[] = [];
 
     // Replace versions of support libraries with set version
-    dependencies.regular = dependencies.regular.map(d =>
+    dependencies.regular = dependencies.regular.map((d) =>
       d.startsWith('com.android.support:')
         ? `${d.slice(0, d.lastIndexOf(':'))}:${
             androidVersions.supportLibraryVersion
           }`
-        : d
-    )
+        : d,
+    );
 
     // Dedupe dependencies with same version
-    dependencies.regular = _.uniq(dependencies.regular)
-    dependencies.files = _.uniq(dependencies.files)
-    dependencies.transitive = _.uniq(dependencies.transitive)
-    dependencies.annotationProcessor = _.uniq(dependencies.annotationProcessor)
+    dependencies.regular = _.uniq(dependencies.regular);
+    dependencies.files = _.uniq(dependencies.files);
+    dependencies.raw = _.uniq(dependencies.raw);
+    dependencies.transitive = _.uniq(dependencies.transitive);
+    dependencies.annotationProcessor = _.uniq(dependencies.annotationProcessor);
 
     // Use highest versions for regular and transitive
     // dependencies with multiple versions
-    const g = _.groupBy(dependencies.regular, x => x.match(/^[^:]+:[^:]+/)![0])
-    dependencies.regular = Object.keys(g).map(x => this.highestVersion(g[x]))
+    const g = _.groupBy(
+      dependencies.regular,
+      (x) => x.match(/^[^:]+:[^:]+/)![0],
+    );
+    dependencies.regular = Object.keys(g).map((x) => this.highestVersion(g[x]));
     const h = _.groupBy(
       dependencies.transitive,
-      x => x.match(/^[^:]+:[^:]+/)![0]
-    )
-    dependencies.transitive = Object.keys(h).map(x => this.highestVersion(h[x]))
+      (x) => x.match(/^[^:]+:[^:]+/)![0],
+    );
+    dependencies.transitive = Object.keys(h).map((x) =>
+      this.highestVersion(h[x]),
+    );
 
     // Add dependencies to result
-    dependencies.regular.forEach(d => result.push(`implementation '${d}'`))
-    dependencies.files.forEach(d => result.push(`implementation ${d}`))
-    dependencies.transitive.forEach(d =>
-      result.push(`implementation ('${d}') { transitive = true }`)
-    )
-    dependencies.annotationProcessor.forEach(d =>
-      result.push(`annotationProcessor '${d}'`)
-    )
-    return result
+    dependencies.regular.forEach((d) => result.push(`implementation '${d}'`));
+    dependencies.files.forEach((d) => result.push(`implementation ${d}`));
+    dependencies.raw.forEach((d) => {
+      result.push(d);
+    });
+    dependencies.transitive.forEach((d) =>
+      result.push(`implementation ('${d}') { transitive = true }`),
+    );
+    dependencies.annotationProcessor.forEach((d) =>
+      result.push(`annotationProcessor '${d}'`),
+    );
+    return result;
   }
 
   public highestVersion(d: string[]): string {
     if (d.length === 1) {
-      return d[0]
+      return d[0];
     }
-    const name = d[0].match(/^[^:]+:[^:]+/)![0]
+    const name = d[0].match(/^[^:]+:[^:]+/)![0];
     const version = d
-      .map(x => x.match(/^[^:]+:[^:]+:(.+)/)![1])
+      .map((x) => x.match(/^[^:]+:[^:]+:(.+)/)![1])
       // Trick to make highest version lookup as easy
       // as peforming a lexical sort
-      .map(x => x.replace('+', '999999'))
+      .map((x) => x.replace('+', '999999'))
       .sort()
-      .map(x => x.replace('999999', '+'))
-      .pop()
-    return `${name}:${version}`
+      .map((x) => x.replace('999999', '+'))
+      .pop();
+    return `${name}:${version}`;
   }
 
   public async addAndroidPluginHookClasses(
     plugins: PackagePath[],
-    outDir: string
+    outDir: string,
   ): Promise<any> {
+    const rnVersion = plugins.find((p) => p.name === 'react-native')?.version!;
     for (const plugin of plugins) {
       if (plugin.name === 'react-native') {
-        continue
+        continue;
       }
-      const pluginConfig = await manifest.getPluginConfig(plugin)
+      const pluginConfig = await manifest.getPluginConfig(plugin, 'android');
       if (!pluginConfig) {
-        continue
-      }
-      if (!pluginConfig.android) {
         log.warn(
-          `Skipping ${plugin.name} as it does not have an Android configuration`
-        )
-        continue
+          `Skipping ${plugin.name} as it does not have an Android configuration`,
+        );
+        continue;
       }
-      const androidPluginHook = pluginConfig.android.pluginHook
+      const androidPluginHook = pluginConfig.pluginHook;
       if (androidPluginHook) {
-        log.debug(`Adding ${androidPluginHook.name}.java`)
+        log.debug(`Adding ${androidPluginHook.name}.java`);
         if (!pluginConfig.path) {
-          throw new Error('No plugin config path was set. Cannot proceed.')
+          throw new Error('No plugin config path was set. Cannot proceed.');
         }
         const pathToPluginConfigHook = path.join(
           pluginConfig.path,
-          `${androidPluginHook.name}.java`
-        )
+          `${androidPluginHook.name}.java`,
+        );
         const pathToCopyPluginConfigHookTo = path.join(
           outDir,
-          'lib/src/main/java/com/walmartlabs/ern/container/plugins'
-        )
-        shell.cp(pathToPluginConfigHook, pathToCopyPluginConfigHookTo)
+          'lib/src/main/java/com/walmartlabs/ern/container/plugins',
+        );
+        shell.cp(pathToPluginConfigHook, pathToCopyPluginConfigHookTo);
       }
     }
   }
 
   public async buildAndroidPluginsViews(
     plugins: PackagePath[],
-    mustacheView: any
+    mustacheView: any,
   ): Promise<any> {
     mustacheView.plugins = await generatePluginsMustacheViews(
       plugins,
-      'android'
-    )
+      'android',
+    );
     const reactNativeCodePushPlugin = _.find(
       plugins,
-      p => p.name === 'react-native-code-push'
-    )
+      (p) => p.name === 'react-native-code-push',
+    );
     if (reactNativeCodePushPlugin) {
-      mustacheView.isCodePushPluginIncluded = true
+      mustacheView.isCodePushPluginIncluded = true;
     }
   }
 }

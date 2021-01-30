@@ -1,6 +1,6 @@
-import { BundlingResult, log, reactnative, shell } from 'ern-core'
-import fs from 'fs'
-import path from 'path'
+import { BundlingResult, reactnative, shell } from 'ern-core';
+import fs from 'fs';
+import path from 'path';
 
 export async function reactNativeBundleAndroid({
   bundleOutput,
@@ -10,31 +10,29 @@ export async function reactNativeBundleAndroid({
   cwd,
   resetCache,
 }: {
-  bundleOutput?: string
-  dev?: boolean
-  outDir: string
-  sourceMapOutput?: string
-  cwd?: string
-  resetCache?: boolean
+  bundleOutput?: string;
+  dev?: boolean;
+  outDir: string;
+  sourceMapOutput?: string;
+  cwd?: string;
+  resetCache?: boolean;
 }): Promise<BundlingResult> {
-  cwd = cwd ?? process.cwd()
-  const libSrcMainPath = path.join(outDir, 'lib', 'src', 'main')
+  cwd = cwd ?? process.cwd();
+  const libSrcMainPath = path.join(outDir, 'lib', 'src', 'main');
   bundleOutput =
-    bundleOutput ?? path.join(libSrcMainPath, 'assets', 'index.android.bundle')
-  const assetsDest = path.join(libSrcMainPath, 'res')
-  // Cleanup everything from 'res' directory but 'devassist'
+    bundleOutput ?? path.join(libSrcMainPath, 'assets', 'index.android.bundle');
+  const assetsDest = path.join(libSrcMainPath, 'res', 'bundle');
+
+  // Cleanup everything from 'res' bundle directory
   if (fs.existsSync(assetsDest)) {
-    fs.readdirSync(assetsDest)
-      .filter(p => p !== 'devassist')
-      .map(p => path.join(assetsDest, p))
-      .forEach(p => shell.rm('-rf', p))
+    shell.rm('-rf', assetsDest);
   }
 
-  shell.pushd(cwd)
+  shell.pushd(cwd);
 
   const entryFile = fs.existsSync(path.join(cwd, 'index.android.js'))
     ? 'index.android.js'
-    : 'index.js'
+    : 'index.js';
 
   try {
     const result = await reactnative.bundle({
@@ -45,9 +43,9 @@ export async function reactNativeBundleAndroid({
       platform: 'android',
       resetCache,
       sourceMapOutput,
-    })
-    return result
+    });
+    return result;
   } finally {
-    shell.popd()
+    shell.popd();
   }
 }

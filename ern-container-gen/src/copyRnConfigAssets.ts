@@ -1,13 +1,16 @@
 import {
+  findDirectoriesHavingRnConfig,
   handleCopyDirective,
   NativePlatform,
-  findDirectoriesHavingRnConfig,
-} from 'ern-core'
-import { getAssetsPath } from './getAssetsPath'
-import readDir from 'fs-readdir-recursive'
-import path from 'path'
+  log,
+} from 'ern-core';
+import { getAssetsPath } from './getAssetsPath';
+import readDir from 'fs-readdir-recursive';
+import path from 'path';
+import fs from 'fs-extra';
+import semver from 'semver';
 
-export const supportedAssetsExts = ['.ttf', '.otf']
+export const supportedAssetsExts = ['.ttf', '.otf'];
 
 /**
  * Copy in Container, the assets of all packages found in Composite,
@@ -24,29 +27,40 @@ export async function copyRnConfigAssets({
   outDir,
   platform,
 }: {
-  compositePath: string
-  outDir: string
-  platform: NativePlatform
+  compositePath: string;
+  outDir: string;
+  platform: NativePlatform;
 }) {
-  const dirs = await findDirectoriesHavingRnConfig(compositePath)
+  const pJson = await fs.readJSON(path.join(compositePath, 'package.json'));
+  const rnVersion = pJson.dependencies['react-native'];
+  const dirs = await findDirectoriesHavingRnConfig(compositePath);
 
   for (const dir of dirs) {
-    const rnConfig: any = require(path.join(dir, 'react-native.config.js'))
+    const rnConfig: any = require(path.join(dir, 'react-native.config.js'));
     const assets =
-      rnConfig.assets || (rnConfig.dependency && rnConfig.dependency.assets)
+      rnConfig.assets || (rnConfig.dependency && rnConfig.dependency.assets);
     if (assets) {
+      if (platform === 'ios' && semver.gte(rnVersion, '0.61.0')) {
+        const files = await fs.readdir(dir);
+        if (files.some((f) => f.endsWith('.podspec'))) {
+          log.debug(
+            `Skipping assets copy to container for ${dir} as it contains a podspec so the resources will be copied over by pod install`,
+          );
+          continue;
+        }
+      }
       for (const assetDir of assets) {
-        const absDir = path.join(dir, assetDir)
+        const absDir = path.join(dir, assetDir);
         readDir(absDir)
-          .filter(p => {
-            return supportedAssetsExts.includes(path.extname(p))
+          .filter((p) => {
+            return supportedAssetsExts.includes(path.extname(p));
           })
-          .map(p => path.join(assetDir, p))
-          .forEach(p => {
+          .map((p) => path.join(assetDir, p))
+          .forEach((p) => {
             handleCopyDirective(dir, outDir, [
               { source: p, dest: getAssetsPath(platform, 'fonts') },
-            ])
-          })
+            ]);
+          });
       }
     }
   }

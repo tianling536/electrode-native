@@ -1,18 +1,17 @@
-import { PackagePath, AppVersionDescriptor, log, utils } from 'ern-core'
-import { getActiveCauldron } from 'ern-cauldron-api'
-import { syncCauldronContainer } from 'ern-orchestrator'
+import { AppVersionDescriptor, log, PackagePath, utils } from 'ern-core';
+import { getActiveCauldron } from 'ern-cauldron-api';
+import { syncCauldronContainer } from 'ern-orchestrator';
 import {
+  askUserToChooseANapDescriptorFromCauldron,
   epilog,
   logErrorAndExitIfNotSatisfied,
-  askUserToChooseANapDescriptorFromCauldron,
   tryCatchWrap,
-} from '../../../lib'
-import _ from 'lodash'
-import { Argv } from 'yargs'
+} from '../../../lib';
+import { Argv } from 'yargs';
 
-export const command = 'miniapps <miniapps..>'
+export const command = 'miniapps <miniapps..>';
 export const desc =
-  'Update the version(s) of one or more MiniApp(s) in the Cauldron'
+  'Update the version(s) of one or more MiniApp(s) in the Cauldron';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -27,14 +26,13 @@ export const builder = (argv: Argv) => {
       describe: 'A complete native application descriptor',
       type: 'string',
     })
-    .coerce('descriptor', d => AppVersionDescriptor.fromString(d))
+    .coerce('descriptor', (d) => AppVersionDescriptor.fromString(d))
     .option('fullRegen', {
       describe: 'Perform complete regeneration',
       type: 'boolean',
     })
-    .coerce('miniapps', d => d.map(PackagePath.fromString))
+    .coerce('miniapps', (d) => d.map(PackagePath.fromString))
     .option('resetCache', {
-      default: false,
       describe:
         'Indicates whether to reset the React Native cache prior to bundling',
       type: 'boolean',
@@ -44,8 +42,8 @@ export const builder = (argv: Argv) => {
         'Target version to update all MiniApps to. Can only be used if `all` is used for MiniApps.',
       type: 'string',
     })
-    .epilog(epilog(exports))
-}
+    .epilog(epilog(exports));
+};
 
 export const commandHandler = async ({
   containerVersion,
@@ -55,34 +53,34 @@ export const commandHandler = async ({
   resetCache,
   targetVersion,
 }: {
-  containerVersion?: string
-  descriptor?: AppVersionDescriptor
-  fullRegen?: boolean
-  miniapps: PackagePath[]
-  resetCache?: boolean
-  targetVersion?: string
+  containerVersion?: string;
+  descriptor?: AppVersionDescriptor;
+  fullRegen?: boolean;
+  miniapps: PackagePath[];
+  resetCache?: boolean;
+  targetVersion?: string;
 }) => {
   descriptor =
     descriptor ||
     (await askUserToChooseANapDescriptorFromCauldron({
       onlyNonReleasedVersions: true,
-    }))
+    }));
 
-  const cauldron = await getActiveCauldron()
+  const cauldron = await getActiveCauldron();
 
   if (miniapps.length === 1 && miniapps[0].basePath === 'all') {
     if (!targetVersion) {
-      throw new Error(`missing --targetVersion option`)
+      throw new Error(`missing --targetVersion option`);
     }
-    const x = await cauldron.getContainerMiniApps(descriptor)
-    miniapps = x.map(p =>
+    const x = await cauldron.getContainerMiniApps(descriptor);
+    miniapps = x.map((p) =>
       p.isGitPath
         ? PackagePath.fromString(`${p.basePath}#${targetVersion}`)
-        : PackagePath.fromString(`${p.basePath}@${targetVersion}`)
-    )
+        : PackagePath.fromString(`${p.basePath}@${targetVersion}`),
+    );
     log.info(
-      `Updating all MiniApps from ${descriptor} Container to target version ${targetVersion}`
-    )
+      `Updating all MiniApps from ${descriptor} Container to target version ${targetVersion}`,
+    );
   }
 
   await logErrorAndExitIfNotSatisfied({
@@ -114,27 +112,27 @@ export const commandHandler = async ({
       extraErrorMessage:
         'This command cannot work on a non existing native application version',
     },
-  })
+  });
 
   // Special handling for git based MiniApps
   // Indeed, if only the branch or tag a MiniApp has been updated, but the head commit SHA
   // is still the same, then we shouldn't consider the MiniApp as an updated MiniApp
   // given that it will not contain any changes at all. We should just update the branch
   // in the Cauldron, but not go through complete handling.
-  const updatedMiniApps: PackagePath[] = []
-  const containerMiniApps = await cauldron.getContainerMiniApps(descriptor)
+  const updatedMiniApps: PackagePath[] = [];
+  const containerMiniApps = await cauldron.getContainerMiniApps(descriptor);
   for (const miniapp of miniapps) {
     if ((await utils.isGitBranch(miniapp)) || (await utils.isGitTag(miniapp))) {
-      const headCommitSha = await utils.getCommitShaOfGitBranchOrTag(miniapp)
+      const headCommitSha = await utils.getCommitShaOfGitBranchOrTag(miniapp);
       if (
         !containerMiniApps.some(
-          m => m.basePath === miniapp.basePath && m.version === headCommitSha
+          (m) => m.basePath === miniapp.basePath && m.version === headCommitSha,
         )
       ) {
-        updatedMiniApps.push(miniapp)
+        updatedMiniApps.push(miniapp);
       }
     } else {
-      updatedMiniApps.push(miniapp)
+      updatedMiniApps.push(miniapp);
     }
   }
 
@@ -144,24 +142,24 @@ export const commandHandler = async ({
         ? `Update ${miniapps[0]} MiniApp version in ${descriptor}`
         : `Update multiple MiniApps versions in ${descriptor}`
     }`,
-  ]
+  ];
 
   if (updatedMiniApps.length === 0) {
     log.info(
-      'No changes to MiniApps resolved SHAs (pointing to same commit(s))'
-    )
+      'No changes to MiniApps resolved SHAs (pointing to same commit(s))',
+    );
     if (fullRegen) {
-      log.info('Performing regen anyway [--fullRegen]')
+      log.info('Performing regen anyway [--fullRegen]');
     } else {
       log.info(
         `Skipping Container regen.
 Only updating Cauldron with new MiniApps versions.
-To regenerate anyway use the --fullRegen option.`
-      )
-      await cauldron.beginTransaction()
-      await cauldron.syncContainerMiniApps(descriptor!, miniapps)
-      await cauldron.commitTransaction(cauldronCommitMessage)
-      return
+To regenerate anyway use the --fullRegen option.`,
+      );
+      await cauldron.beginTransaction();
+      await cauldron.syncContainerMiniApps(descriptor!, miniapps);
+      await cauldron.commitTransaction(cauldronCommitMessage);
+      return;
     }
   }
 
@@ -169,19 +167,19 @@ To regenerate anyway use the --fullRegen option.`
     async () => {
       for (const miniApp of miniapps) {
         cauldronCommitMessage.push(
-          `- Update ${miniApp.basePath} MiniApp version to v${miniApp.version}`
-        )
+          `- Update ${miniApp.basePath} MiniApp version to v${miniApp.version}`,
+        );
       }
-      await cauldron.syncContainerMiniApps(descriptor!, miniapps)
+      await cauldron.syncContainerMiniApps(descriptor!, miniapps);
     },
     descriptor,
     cauldronCommitMessage,
     {
       containerVersion,
       resetCache,
-    }
-  )
-  log.info(`MiniApp(s) version(s) successfully updated in ${descriptor}`)
-}
+    },
+  );
+  log.info(`MiniApp(s) version(s) successfully updated in ${descriptor}`);
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

@@ -6,8 +6,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "ern-typescript && ern-copyfiles",
-    "coverage": "ern-nyc",
-    "instrument-dist": "ern-instrument-dist && ern-copyfiles",
+    "instrument": "yarn nyc instrument dist --in-place && ern-copyfiles",
     "prepublish": "yarn run build",
     "regen-fixtures": "../node_modules/.bin/ts-node test/regen-fixtures",
     "test": "ern-mocha"
@@ -40,14 +39,14 @@
     "ern-core": "1000.0.0",
     "ern-runner-gen": "1000.0.0",
     "fs-readdir-recursive": "^1.1.0",
-    "mustache": "^2.3.1"
+    "mustache": "^4.0.1"
   },
   "devDependencies": {
-    "copyfiles": "^2.0.0",
+    "copyfiles": "^2.3.0",
     "ern-util-dev": "1000.0.0"
   },
   "engines": {
-    "node": ">=8.3"
+    "node": ">=10"
   },
   "copyFiles": [
     {

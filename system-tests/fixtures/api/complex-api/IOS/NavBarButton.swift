@@ -1,6 +1,5 @@
 #if swift(>=4.0)
 @objcMembers public class NavBarButton: ElectrodeObject, Bridgeable {
-
     private static let tag = String(describing: type(of: self))
 
     /**
@@ -30,54 +29,45 @@
         super.init()
     }
 
-    required public init(dictionary:[AnyHashable:Any]) {
-        
-
-        if let name = dictionary["name"] as? String  {
-                  self.name = name
+    public required init(dictionary: [AnyHashable: Any]) {
+        if let name = dictionary["name"] as? String {
+            self.name = name
         } else {
-            assertionFailure("\(NavBarButton.tag) missing one or more required properties [name] ")
+            assertionFailure("\(NavBarButton.tag) missing one or more required properties [name]")
             self.name = dictionary["name"] as! String
         }
-
-                 
-
-        if let identifier = dictionary["identifier"] as? String  {
-                  self.identifier = identifier
+        if let identifier = dictionary["identifier"] as? String {
+            self.identifier = identifier
         } else {
-            assertionFailure("\(NavBarButton.tag) missing one or more required properties [identifier] ")
+            assertionFailure("\(NavBarButton.tag) missing one or more required properties [identifier]")
             self.identifier = dictionary["identifier"] as! String
         }
-
-         
-
 
         if let showIcon = dictionary["showIcon"] as? Bool {
             self.showIcon = showIcon
         } else {
             self.showIcon = nil
         }
-        
+
         super.init(dictionary: dictionary)
     }
 
     public func toDictionary() -> NSDictionary {
+        var dict = [:] as [AnyHashable: Any]
 
-         var dict = [:] as [AnyHashable : Any]
-
-         dict["name"] =  self.name
-dict["identifier"] =  self.identifier
+        dict["name"] = self.name
+        dict["identifier"] = self.identifier
 
         if let nonNullShowIcon = self.showIcon {
-                dict["showIcon"] = nonNullShowIcon
+            dict["showIcon"] = nonNullShowIcon
         }
         return dict as NSDictionary
     }
 }
+
 #else
 
 public class NavBarButton: ElectrodeObject, Bridgeable {
-
     private static let tag = String(describing: type(of: self))
 
     /**
@@ -107,46 +97,37 @@ public class NavBarButton: ElectrodeObject, Bridgeable {
         super.init()
     }
 
-    required public init(dictionary:[AnyHashable:Any]) {
-        
-
-        if let name = dictionary["name"] as? String  {
-                  self.name = name
+    public required init(dictionary: [AnyHashable: Any]) {
+        if let name = dictionary["name"] as? String {
+            self.name = name
         } else {
-            assertionFailure("\(NavBarButton.tag) missing one or more required properties [name] ")
+            assertionFailure("\(NavBarButton.tag) missing one or more required properties [name]")
             self.name = dictionary["name"] as! String
         }
-
-                 
-
-        if let identifier = dictionary["identifier"] as? String  {
-                  self.identifier = identifier
+        if let identifier = dictionary["identifier"] as? String {
+            self.identifier = identifier
         } else {
-            assertionFailure("\(NavBarButton.tag) missing one or more required properties [identifier] ")
+            assertionFailure("\(NavBarButton.tag) missing one or more required properties [identifier]")
             self.identifier = dictionary["identifier"] as! String
         }
-
-         
-
 
         if let showIcon = dictionary["showIcon"] as? Bool {
             self.showIcon = showIcon
         } else {
             self.showIcon = nil
         }
-        
+
         super.init(dictionary: dictionary)
     }
 
     public func toDictionary() -> NSDictionary {
+        var dict = [:] as [AnyHashable: Any]
 
-         var dict = [:] as [AnyHashable : Any]
-
-         dict["name"] =  self.name
-dict["identifier"] =  self.identifier
+        dict["name"] = self.name
+        dict["identifier"] = self.identifier
 
         if let nonNullShowIcon = self.showIcon {
-                dict["showIcon"] = nonNullShowIcon
+            dict["showIcon"] = nonNullShowIcon
         }
         return dict as NSDictionary
     }

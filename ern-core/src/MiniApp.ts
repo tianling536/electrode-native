@@ -1,26 +1,26 @@
-import { execSync, execFile } from 'child_process'
-import fs from 'fs-extra'
-import path from 'path'
-import semver from 'semver'
-import { manifest } from './Manifest'
-import * as ModuleTypes from './ModuleTypes'
-import { PackagePath } from './PackagePath'
-import Platform from './Platform'
-import { reactnative, yarn } from './clients'
-import config from './config'
-import createTmpDir from './createTmpDir'
-import log from './log'
+import { execSync } from 'child_process';
+import fs from 'fs-extra';
+import path from 'path';
+import semver from 'semver';
+import { manifest } from './Manifest';
+import * as ModuleTypes from './ModuleTypes';
+import { PackagePath } from './PackagePath';
+import Platform from './Platform';
+import { reactnative, yarn } from './clients';
+import config from './config';
+import createTmpDir from './createTmpDir';
+import log from './log';
 import {
   findNativeDependencies,
   NativeDependencies,
-} from './nativeDependenciesLookup'
-import shell from './shell'
-import * as utils from './utils'
-import { readPackageJson, writePackageJson } from './packageJsonFileUtils'
-import { packageCache } from './packageCache'
-import kax from './kax'
-import { BaseMiniApp } from './BaseMiniApp'
-import _ from 'lodash'
+} from './nativeDependenciesLookup';
+import shell from './shell';
+import * as utils from './utils';
+import { readPackageJson, writePackageJson } from './packageJsonFileUtils';
+import { packageCache } from './packageCache';
+import kax from './kax';
+import { BaseMiniApp } from './BaseMiniApp';
+import _ from 'lodash';
 
 const npmIgnoreContent = `ios/
 android/
@@ -29,105 +29,111 @@ yarn.lock
 .buckconfig
 .gitattributes
 .watchmanconfig
-`
+`;
 
 export class MiniApp extends BaseMiniApp {
   // Session cache
-  public static miniAppFsPathByPackagePath = new Map<string, string>()
+  public static miniAppFsPathByPackagePath = new Map<string, string>();
 
   public static fromCurrentPath() {
-    return MiniApp.fromPath(process.cwd())
+    return MiniApp.fromPath(process.cwd());
   }
 
   public static fromPath(fsPath: string) {
-    return new MiniApp(fsPath, PackagePath.fromString(fsPath))
+    return new MiniApp(fsPath, PackagePath.fromString(fsPath));
   }
 
   public static existInPath(p: string) {
     // Need to improve this one to check in the package.json if it contains the
     // ern object with miniapp type
-    return fs.pathExistsSync(path.join(p, 'package.json'))
+    return fs.pathExistsSync(path.join(p, 'package.json'));
   }
 
   public static async fromPackagePath(packagePath: PackagePath) {
-    let fsPackagePath
+    let fsPackagePath;
     if (
       config.get('package-cache-enabled', true) &&
       !packagePath.isFilePath &&
       !(await utils.isGitBranch(packagePath))
     ) {
       if (!(await packageCache.isInCache(packagePath))) {
-        fsPackagePath = await packageCache.addToCache(packagePath)
+        fsPackagePath = await packageCache.addToCache(packagePath);
       } else {
-        fsPackagePath = await packageCache.getObjectCachePath(packagePath)
+        fsPackagePath = await packageCache.getObjectCachePath(packagePath);
       }
     } else {
       if (this.miniAppFsPathByPackagePath.has(packagePath.fullPath)) {
         fsPackagePath = this.miniAppFsPathByPackagePath.get(
-          packagePath.fullPath
-        )
+          packagePath.fullPath,
+        );
       } else {
-        fsPackagePath = createTmpDir()
-        shell.pushd(fsPackagePath)
+        fsPackagePath = createTmpDir();
+        shell.pushd(fsPackagePath);
         try {
-          await yarn.init()
-          await yarn.add(packagePath)
-          const packageJson = await readPackageJson('.')
-          const packageName = Object.keys(packageJson.dependencies)[0]
-          shell.rm(path.join(fsPackagePath, 'package.json'))
+          await yarn.init();
+          await yarn.add(packagePath);
+          const packageJson = await readPackageJson('.');
+          const packageName = Object.keys(packageJson.dependencies)[0];
+          shell.rm(path.join(fsPackagePath, 'package.json'));
           shell.mv(
             path.join(fsPackagePath, 'node_modules', packageName, '*'),
-            fsPackagePath
-          )
+            fsPackagePath,
+          );
           shell.rm(
             '-rf',
-            path.join(fsPackagePath, 'node_modules', packageName, '*')
-          )
+            path.join(fsPackagePath, 'node_modules', packageName, '*'),
+          );
         } finally {
-          shell.popd()
+          shell.popd();
         }
       }
     }
     if (!fsPackagePath) {
-      throw new Error(`Could not resolve local path to ${packagePath}`)
+      throw new Error(`Could not resolve local path to ${packagePath}`);
     }
-    this.miniAppFsPathByPackagePath.set(packagePath.fullPath, fsPackagePath)
-    return new MiniApp(fsPackagePath, packagePath)
+    this.miniAppFsPathByPackagePath.set(packagePath.fullPath, fsPackagePath);
+    return new MiniApp(fsPackagePath, packagePath);
   }
 
   public static async create(
     miniAppName: string,
     packageName: string,
     {
-      language = 'JavaScript',
+      language,
       manifestId,
       packageManager,
       platformVersion = Platform.currentVersion,
       scope,
+      skipInstall,
       template,
     }: {
-      language?: 'JavaScript' | 'TypeScript'
-      manifestId?: string
-      packageManager?: 'npm' | 'yarn'
-      platformVersion?: string
-      scope?: string
-      template?: string
-    } = {}
+      language?: 'JavaScript' | 'TypeScript';
+      manifestId?: string;
+      packageManager?: 'npm' | 'yarn';
+      platformVersion?: string;
+      scope?: string;
+      skipInstall?: boolean;
+      template?: string;
+    } = {},
   ) {
     if (await fs.pathExists(path.join('node_modules/react-native'))) {
       throw new Error(
-        'It seems like there is already a react native app in this directory. Use another directory.'
-      )
+        'It seems like there is already a react native app in this directory. Use another directory.',
+      );
     }
 
     if (Platform.currentVersion !== platformVersion) {
-      Platform.switchToVersion(platformVersion)
+      Platform.switchToVersion(platformVersion);
     }
 
-    let reactNativeVersion
+    if (language && template) {
+      log.warn('Both language and template are set. Ignoring language.');
+    }
+
+    let reactNativeVersion;
     const retrieveRnManifestTask = kax.task(
-      'Querying Manifest for react-native version to use'
-    )
+      'Querying Manifest for react-native version to use',
+    );
 
     try {
       const reactNativeDependency = await manifest.getNativeDependency(
@@ -135,25 +141,25 @@ export class MiniApp extends BaseMiniApp {
         {
           manifestId,
           platformVersion,
-        }
-      )
+        },
+      );
 
       if (!reactNativeDependency) {
         throw new Error(
-          'react-native dependency is not defined in manifest. cannot infer version to be used'
-        )
+          'react-native dependency is not defined in manifest. cannot infer version to be used',
+        );
       }
 
-      reactNativeVersion = reactNativeDependency.version
+      reactNativeVersion = reactNativeDependency.version;
       if (!reactNativeVersion) {
-        throw new Error('React Native version needs to be explicitly defined')
+        throw new Error('React Native version needs to be explicitly defined');
       }
       retrieveRnManifestTask.succeed(
-        `Retrieved react-native version from Manifest [${reactNativeVersion}]`
-      )
+        `Retrieved react-native version from Manifest [${reactNativeVersion}]`,
+      );
     } catch (e) {
-      retrieveRnManifestTask.fail()
-      throw e
+      retrieveRnManifestTask.fail();
+      throw e;
     }
 
     if (
@@ -163,35 +169,50 @@ export class MiniApp extends BaseMiniApp {
     ) {
       throw new Error(`pod command not found.
 CocoaPods is required starting from React Native 0.60 version.
-You can find instructions to install CocoaPods @ https://cocoapods.org`)
+You can find instructions to install CocoaPods @ https://cocoapods.org`);
     }
 
+    // RN rejects standard kebab-case app/package names (most likely due to a
+    // former restriction in an old version of Xcode). Until this is fixed in
+    // RN, use a temporary RN-compatible name and rename the folder later
+    const rnProjectName = /^[$A-Z_][0-9A-Z_$]*$/i.test(miniAppName)
+      ? miniAppName
+      : utils.camelize(miniAppName);
+    const typescriptTemplate = semver.gte(reactNativeVersion, '0.60.0')
+      ? 'react-native-template-typescript'
+      : 'typescript';
     await kax
       .task(
-        `Creating ${miniAppName} project using react-native v${reactNativeVersion}`
+        `Creating ${miniAppName} project using react-native@${reactNativeVersion}`,
       )
       .run(
-        reactnative.init(miniAppName, reactNativeVersion, {
-          template:
-            language === 'TypeScript'
-              ? 'typescript'
-              : template
-              ? template
-              : undefined,
-        })
-      )
+        reactnative.init(rnProjectName, reactNativeVersion, {
+          skipInstall,
+          template: template
+            ? template
+            : language === 'TypeScript'
+            ? typescriptTemplate
+            : undefined,
+        }),
+      );
+    if (rnProjectName !== miniAppName) {
+      fs.renameSync(
+        path.join(process.cwd(), rnProjectName),
+        path.join(process.cwd(), miniAppName),
+      );
+    }
 
     // Create .npmignore if it does not exist
-    const npmIgnorePath = path.join(process.cwd(), miniAppName, '.npmignore')
+    const npmIgnorePath = path.join(process.cwd(), miniAppName, '.npmignore');
     if (!npmIgnorePath) {
-      await fs.writeFile(npmIgnorePath, npmIgnoreContent)
+      await fs.writeFile(npmIgnorePath, npmIgnoreContent);
     }
 
     // Inject ern specific data in MiniApp package.json
-    const pathToMiniApp = path.join(process.cwd(), miniAppName)
-    const appPackageJson = await readPackageJson(pathToMiniApp)
+    const pathToMiniApp = path.join(process.cwd(), miniAppName);
+    const appPackageJson = await readPackageJson(pathToMiniApp);
     appPackageJson.ern = {
-      moduleName: miniAppName,
+      moduleName: rnProjectName,
       moduleType: ModuleTypes.MINIAPP,
       packageManager: packageManager
         ? packageManager
@@ -199,21 +220,21 @@ You can find instructions to install CocoaPods @ https://cocoapods.org`)
         ? 'yarn'
         : 'npm',
       version: platformVersion,
-    }
-    appPackageJson.private = false
+    };
+    appPackageJson.private = false;
     appPackageJson.keywords
       ? appPackageJson.keywords.push(ModuleTypes.MINIAPP)
-      : (appPackageJson.keywords = [ModuleTypes.MINIAPP])
+      : (appPackageJson.keywords = [ModuleTypes.MINIAPP]);
 
     if (scope) {
-      appPackageJson.name = `@${scope}/${packageName}`
+      appPackageJson.name = `@${scope}/${packageName}`;
     } else {
-      appPackageJson.name = packageName
+      appPackageJson.name = packageName;
     }
 
-    await writePackageJson(pathToMiniApp, appPackageJson)
+    await writePackageJson(pathToMiniApp, appPackageJson);
 
-    const miniAppPath = path.join(process.cwd(), miniAppName)
+    const miniAppPath = path.join(process.cwd(), miniAppName);
 
     // For RN > 0.57
     // Write custom metro.config.js to make sure that packager does not crash
@@ -247,18 +268,18 @@ module.exports = {
     }),
   },
 };
-`
-      )
+`,
+      );
     }
 
     // Remove react-native generated android and ios projects
     // They will be replaced with our owns when user uses `ern run android`
     // or `ern run ios` command
     // Also add ern-navigation dependency to the MiniApp.
-    shell.pushd(miniAppPath)
+    shell.pushd(miniAppPath);
     try {
-      shell.rm('-rf', 'android')
-      shell.rm('-rf', 'ios')
+      shell.rm('-rf', 'android');
+      shell.rm('-rf', 'ios');
       const ernNavigationDependency =
         (await kax
           .task('Querying Manifest for ern-navigation version to use')
@@ -268,20 +289,20 @@ module.exports = {
               {
                 manifestId,
                 platformVersion,
-              }
-            )
-          )) || PackagePath.fromString('ern-navigation')
+              },
+            ),
+          )) || PackagePath.fromString('ern-navigation');
       await kax
         .task(`Adding ${ernNavigationDependency} dependency`)
-        .run(yarn.add(ernNavigationDependency))
-      return MiniApp.fromPath(miniAppPath)
+        .run(yarn.add(ernNavigationDependency));
+      return MiniApp.fromPath(miniAppPath);
     } finally {
-      shell.popd()
+      shell.popd();
     }
   }
 
   constructor(miniAppPath: string, packagePath: PackagePath) {
-    super({ miniAppPath, packagePath })
+    super({ miniAppPath, packagePath });
   }
 
   public async getNativeDependencies({
@@ -289,24 +310,24 @@ module.exports = {
   }: { manifestId?: string } = {}): Promise<NativeDependencies> {
     return findNativeDependencies(path.join(this.path, 'node_modules'), {
       manifestId,
-    })
+    });
   }
 
   // Return all javascript (non native) dependencies currently used by the MiniApp
   // This method checks dependencies from the package.json of the MiniApp and
   // exclude native dependencies (plugins).
   public async getJsDependencies(): Promise<PackagePath[]> {
-    const nativeDependencies: NativeDependencies = await this.getNativeDependencies()
+    const nativeDependencies: NativeDependencies = await this.getNativeDependencies();
     const nativeDependenciesNames: string[] = _.map(
       nativeDependencies.all,
-      d => d.name!
-    )
-    const nativeAndJsDependencies = this.getPackageJsonDependencies()
+      (d) => d.name!,
+    );
+    const nativeAndJsDependencies = this.getPackageJsonDependencies();
 
     return _.filter(
       nativeAndJsDependencies,
-      d => !nativeDependenciesNames.includes(`${d.name!}@${d.version}`)
-    )
+      (d) => !nativeDependenciesNames.includes(`${d.name!}@${d.version}`),
+    );
   }
 
   public async addDependency(
@@ -315,82 +336,83 @@ module.exports = {
       dev,
       manifestId,
       peer,
-    }: { dev?: boolean; manifestId?: string; peer?: boolean } = {}
+    }: { dev?: boolean; manifestId?: string; peer?: boolean } = {},
   ): Promise<PackagePath | void> {
     if (!dependency) {
-      return log.error('dependency cannot be null')
+      return log.error('dependency cannot be null');
     }
     if (dev || peer) {
       // Dependency is a devDependency or peerDependency
       // In that case we don't perform any checks at all (for now)
-      await this.addDevOrPeerDependency(dependency, dev)
+      await this.addDevOrPeerDependency(dependency, dev);
     } else {
       // Dependency is not a development dependency
       // In that case we need to perform additional checks and operations
-      const basePathDependency = new PackagePath(dependency.basePath)
+      const basePathDependency = new PackagePath(dependency.basePath);
       const manifestNativeDependency = await manifest.getNativeDependency(
         basePathDependency,
-        { manifestId }
-      )
+        { manifestId },
+      );
       const manifestDependency =
         manifestNativeDependency ||
-        (await manifest.getJsDependency(basePathDependency, { manifestId }))
+        (await manifest.getJsDependency(basePathDependency, { manifestId }));
 
       if (!manifestDependency) {
         // Dependency is not declared in manifest
         // We need to detect if this dependency is a pure JS one or if it's a native one or
         // if it contains transitive native dependencies
-        const tmpPath = createTmpDir()
-        process.chdir(tmpPath)
+        const tmpPath = createTmpDir();
+        process.chdir(tmpPath);
         await kax
           .task(
-            `${basePathDependency.toString()} is not declared in the manifest. Performing additional checks.`
+            `${basePathDependency.toString()} is not declared in the manifest. Performing additional checks.`,
           )
           .run(
             this.packageManager.add(
-              PackagePath.fromString(dependency.toString())
-            )
-          )
+              PackagePath.fromString(dependency.toString()),
+            ),
+          );
 
         const nativeDependencies = await findNativeDependencies(
-          path.join(tmpPath, 'node_modules')
-        )
+          path.join(tmpPath, 'node_modules'),
+        );
         if (_.isEmpty(nativeDependencies.all)) {
-          log.debug('Pure JS dependency')
+          log.debug('Pure JS dependency');
           // This is a pure JS dependency. Not much to do here -yet-
         } else if (nativeDependencies.all.length >= 1) {
           log.debug(
             `One or more native dependencies identified: ${JSON.stringify(
-              nativeDependencies.all
-            )}`
-          )
-          let dep
+              nativeDependencies.all,
+            )}`,
+          );
+          let dep;
           for (dep of nativeDependencies.all) {
             if (dependency.name === dep.name) {
               if (await utils.isDependencyApiOrApiImpl(dep)) {
-                log.debug(`${dep.name} is an api or api-impl`)
+                log.debug(`${dep.name} is an api or api-impl`);
                 log.warn(
-                  `${dep.name} is not declared in the Manifest. You might consider adding it.`
-                )
+                  `${dep.name} is not declared in the Manifest. You might consider adding it.`,
+                );
               } else {
                 // This is a third party native dependency. If it's not in the master manifest,
                 // then it means that it is not supported by the platform yet. Fail.
-                return log.error(
-                  `${dep.name} plugin is not yet supported. Consider adding support for it to the master manifest`
-                )
+                throw new Error(
+                  `${dep.name} plugin is not yet supported. Consider adding support for it to the master manifest`,
+                );
               }
             } else {
               // This is a dependency which is not native itself but contains a native dependency as  transitive one (example 'native-base')
               // If ern platform contains entry in the manifest but dependency versions do not align, report error
               const manifestDep = await manifest.getNativeDependency(
                 new PackagePath(dep.basePath),
-                { manifestId }
-              )
+                { manifestId },
+              );
               if (manifestDep) {
                 if (dep.version !== manifestDep.version) {
                   throw new Error(
-                    `[Transitive Dependency] ${dep.name} was not added to the MiniApp`
-                  )
+                    `Version of transitive dependency ${dep.name}@${dep.version}
+does not match version declared in manifest: ${manifestDep.version}`,
+                  );
                 }
               }
             }
@@ -399,31 +421,31 @@ module.exports = {
       } else {
         if (dependency.version) {
           log.debug(
-            `Dependency:${dependency.name} defined in manifest, performing version match`
-          )
+            `Dependency:${dependency.name} defined in manifest, performing version match`,
+          );
           // If the dependency & manifest version differ, log error and exit
           if (dependency.version !== manifestDependency.version) {
-            throw new Error(`${dependency.name} was not added to the MiniApp`)
+            throw new Error(`${dependency.name} was not added to the MiniApp`);
           }
         }
       }
 
       // Checks have passed add the dependency
-      process.chdir(this.path)
+      process.chdir(this.path);
       await kax
         .task(
           `Adding ${
             manifestDependency
               ? manifestDependency.toString()
               : dependency.toString()
-          } to ${this.name}`
+          } to ${this.name}`,
         )
         .run(
           this.packageManager.add(
-            manifestDependency || PackagePath.fromString(dependency.toString())
-          )
-        )
-      return manifestDependency ? manifestDependency : dependency
+            manifestDependency || PackagePath.fromString(dependency.toString()),
+          ),
+        );
+      return manifestDependency ? manifestDependency : dependency;
     }
   }
 
@@ -436,7 +458,7 @@ module.exports = {
    */
   public manifestConformingDependency(
     dependency: PackagePath,
-    manifestDependency: PackagePath
+    manifestDependency: PackagePath,
   ): PackagePath | void {
     if (
       !dependency.version ||
@@ -444,19 +466,21 @@ module.exports = {
     ) {
       // If no version was specified for this dependency, we're good, just use the version
       // declared in the manifest
-      return manifestDependency
+      return manifestDependency;
     } else {
       // Dependency version mismatch. Let the user know of potential impacts and suggest user to
       // updat the version in the manifest
       // TODO : If not API/API impl, we need to ensure that plugin is supported by platform
       // for the provided plugin version
-      log.warn(`${dependency.toString()} version mismatch.`)
-      log.warn(`Manifest version: ${manifestDependency.version || 'undefined'}`)
-      log.warn(`Wanted version: ${dependency.version || 'undefined'}`)
+      log.warn(`${dependency.toString()} version mismatch.`);
       log.warn(
-        `You might want to update the version in your Manifest to add this dependency to ${this.name}`
-      )
-      return dependency
+        `Manifest version: ${manifestDependency.version || 'undefined'}`,
+      );
+      log.warn(`Wanted version: ${dependency.version || 'undefined'}`);
+      log.warn(
+        `You might want to update the version in your Manifest to add this dependency to ${this.name}`,
+      );
+      return dependency;
     }
   }
 
@@ -464,28 +488,28 @@ module.exports = {
     manifestId,
     platformVersion = Platform.currentVersion,
   }: {
-    manifestId?: string
-    platformVersion?: string
+    manifestId?: string;
+    platformVersion?: string;
   } = {}): Promise<any> {
     // Update all modules versions in package.json
     const manifestDependencies = await manifest.getJsAndNativeDependencies({
       manifestId,
       platformVersion,
-    })
+    });
 
     for (const manifestDependency of manifestDependencies) {
       if (this.packageJson.dependencies[manifestDependency.basePath]) {
-        const dependencyManifestVersion = manifestDependency.version
+        const dependencyManifestVersion = manifestDependency.version;
         const localDependencyVersion = this.packageJson.dependencies[
           manifestDependency.basePath
-        ]
+        ];
         if (dependencyManifestVersion !== localDependencyVersion) {
           log.info(
-            `${manifestDependency.basePath} : ${localDependencyVersion} => ${dependencyManifestVersion}`
-          )
+            `${manifestDependency.basePath} : ${localDependencyVersion} => ${dependencyManifestVersion}`,
+          );
           this.packageJson.dependencies[
             manifestDependency.basePath
-          ] = dependencyManifestVersion
+          ] = dependencyManifestVersion;
         }
       }
     }
@@ -493,69 +517,69 @@ module.exports = {
     // Update ernPlatformVersion in package.json
     if (!this.packageJson.ern) {
       throw new Error(`In order to upgrade, please first replace "ernPlatformVersion" : "${this.packageJson.ernPlatformVersion}" in your package.json
-with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`)
+with "ern" : { "version" : "${this.packageJson.ernPlatformVersion}" } instead`);
     }
 
-    this.packageJson.ern.version = platformVersion
+    this.packageJson.ern.version = platformVersion;
 
     // Write back package.json
-    const appPackageJsonPath = path.join(this.path, 'package.json')
+    const appPackageJsonPath = path.join(this.path, 'package.json');
     await fs.writeFile(
       appPackageJsonPath,
-      JSON.stringify(this.packageJson, null, 2)
-    )
+      JSON.stringify(this.packageJson, null, 2),
+    );
 
-    process.chdir(this.path)
-    await kax.task('Running yarn install').run(this.packageManager.install())
+    process.chdir(this.path);
+    await kax.task('Running yarn install').run(this.packageManager.install());
   }
 
   public publishToNpm() {
-    execSync(`npm publish --prefix ${this.path}`)
+    execSync(`npm publish --prefix ${this.path}`);
   }
 
   public async link() {
-    const miniAppsLinks = config.get('miniAppsLinks', {})
-    const previousLinkPath = miniAppsLinks[this.packageJson.name]
+    const miniAppsLinks = config.get('miniAppsLinks', {});
+    const previousLinkPath = miniAppsLinks[this.packageJson.name];
     if (previousLinkPath && previousLinkPath !== this.path) {
       log.warn(
-        `Replacing previous link [${this.packageJson.name} => ${previousLinkPath}]`
-      )
+        `Replacing previous link [${this.packageJson.name} => ${previousLinkPath}]`,
+      );
     } else if (previousLinkPath && previousLinkPath === this.path) {
       return log.warn(
-        `Link is already created for ${this.packageJson.name} with same path`
-      )
+        `Link is already created for ${this.packageJson.name} with same path`,
+      );
     }
-    miniAppsLinks[this.packageJson.name] = this.path
-    config.set('miniAppsLinks', miniAppsLinks)
+    miniAppsLinks[this.packageJson.name] = this.path;
+    config.set('miniAppsLinks', miniAppsLinks);
     log.info(
-      `${this.packageJson.name} link created [${this.packageJson.name} => ${this.path}]`
-    )
+      `${this.packageJson.name} link created [${this.packageJson.name} => ${this.path}]`,
+    );
   }
 
   public async unlink() {
-    const miniAppsLinks = config.get('miniAppsLinks', {})
+    const miniAppsLinks = config.get('miniAppsLinks', {});
     if (miniAppsLinks[this.packageJson.name]) {
-      delete miniAppsLinks[this.packageJson.name]
-      config.set('miniAppsLinks', miniAppsLinks)
-      log.info(`${this.packageJson.name} link was removed`)
+      delete miniAppsLinks[this.packageJson.name];
+      config.set('miniAppsLinks', miniAppsLinks);
+      log.info(`${this.packageJson.name} link was removed`);
     } else {
-      return log.warn(`No link exists for ${this.packageJson.name}`)
+      return log.warn(`No link exists for ${this.packageJson.name}`);
     }
   }
 
   private async addDevOrPeerDependency(
     dependency: PackagePath,
-    dev: boolean | undefined
+    dev: boolean | undefined,
   ) {
-    const depPath = PackagePath.fromString(dependency.toString())
+    const depPath = PackagePath.fromString(dependency.toString());
     if (dev) {
       await kax
         .task(`Adding ${dependency.toString()} to MiniApp devDependencies`)
-        .run(this.packageManager.add(depPath, { dev: true }))
+        .run(this.packageManager.add(depPath, { dev: true }));
     } else {
       await kax
         .task(`Adding ${dependency.toString()} to MiniApp peerDependencies`)
-        .run(this.packageManager.add(depPath, { peer: true }))
+        .run(this.packageManager.add(depPath, { peer: true }));
     }
   }
 }

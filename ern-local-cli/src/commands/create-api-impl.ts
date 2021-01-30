@@ -1,27 +1,26 @@
 import {
-  PackagePath,
-  utils as coreUtils,
-  Platform,
-  ModuleTypes,
   log,
-  checkIfModuleNameContainsSuffix,
-} from 'ern-core'
-import { generateApiImpl } from 'ern-api-impl-gen'
+  ModuleTypes,
+  PackagePath,
+  Platform,
+  utils as coreUtils,
+  validateModuleName,
+} from 'ern-core';
+import { generateApiImpl } from 'ern-api-impl-gen';
 import {
+  askUserToSelectAnEnvironment,
   epilog,
   logErrorAndExitIfNotSatisfied,
   performPkgNameConflictCheck,
-  promptUserToUseSuffixModuleName,
+  promptUserToUseSuggestedModuleName,
   tryCatchWrap,
-  askUserToInputPackageName,
-  askUserToSelectAnEnvironment,
-} from '../lib'
-import path from 'path'
-import { Argv } from 'yargs'
-import untildify from 'untildify'
+} from '../lib';
+import path from 'path';
+import { Argv } from 'yargs';
+import untildify from 'untildify';
 
-export const command = 'create-api-impl <apiName> [apiImplName]'
-export const desc = 'Commands to generate API implementation skeleton.'
+export const command = 'create-api-impl <apiName> [apiImplName]';
+export const desc = 'Commands to generate API implementation skeleton.';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -33,13 +32,13 @@ export const builder = (argv: Argv) => {
     })
     .option('hasConfig', {
       describe:
-        'Indicates if this api implementation requires some config during initialization. \nThis option will be stored and reused during container generation to enforce config initialization',
+        'Indicates if this api implementation requires some config during initialization.\nThis option will be stored and reused during container generation to enforce config initialization',
       type: 'boolean',
     })
     .option('jsOnly', {
       alias: 'j',
       describe:
-        'Generate js project with proper dependencies (Implementation of the API has to be written in js',
+        'Generate js project with proper dependencies (Implementation of the API has to be written in js)',
       type: 'boolean',
     })
     .option('manifestId', {
@@ -49,32 +48,32 @@ export const builder = (argv: Argv) => {
     .option('nativeOnly', {
       alias: 'n',
       describe:
-        'Generate native projects with proper dependencies (Implementation of the API has to be written in native',
+        'Generate native projects with proper dependencies (Implementation of the API has to be written in native)',
       type: 'boolean',
     })
     .option('packageName', {
       alias: 'p',
-      describe: 'Name to use for the apiImpl NPM package',
+      describe: 'Name to use for the apiImpl npm package',
     })
     .option('scope', {
       alias: 's',
-      describe: 'Scope to use for the apiImpl NPM package',
+      describe: 'Scope to use for the apiImpl npm package',
     })
     .option('skipNpmCheck', {
       describe:
-        'Skip the check ensuring package does not already exists in NPM registry',
+        'Skip the check ensuring package does not already exists in npm registry',
       type: 'boolean',
     })
     .option('outputDirectory', {
       alias: 'o',
       describe: 'Path to output directory',
     })
-    .coerce('outputDirectory', p => untildify(p))
-    .epilog(epilog(exports))
-}
+    .coerce('outputDirectory', (p) => untildify(p))
+    .epilog(epilog(exports));
+};
 
-const WORKING_DIRECTORY = path.join(Platform.rootDirectory, 'api-impl-gen')
-const PLUGIN_DIRECTORY = path.join(WORKING_DIRECTORY, 'plugins')
+const WORKING_DIRECTORY = path.join(Platform.rootDirectory, 'api-impl-gen');
+const PLUGIN_DIRECTORY = path.join(WORKING_DIRECTORY, 'plugins');
 
 export const commandHandler = async ({
   apiName,
@@ -89,19 +88,19 @@ export const commandHandler = async ({
   skipNpmCheck,
   outputDirectory,
 }: {
-  apiName: string
-  apiImplName?: string
-  force: boolean
-  hasConfig: boolean
-  jsOnly: boolean
-  manifestId?: string
-  nativeOnly: boolean
-  packageName?: string
-  scope?: string
-  skipNpmCheck?: boolean
-  outputDirectory: string
+  apiName: string;
+  apiImplName?: string;
+  force: boolean;
+  hasConfig: boolean;
+  jsOnly: boolean;
+  manifestId?: string;
+  nativeOnly: boolean;
+  packageName?: string;
+  scope?: string;
+  skipNpmCheck?: boolean;
+  outputDirectory: string;
 }) => {
-  const apiDep = PackagePath.fromString(apiName)
+  const apiDep = PackagePath.fromString(apiName);
   // pre conditions
   await logErrorAndExitIfNotSatisfied({
     noGitOrFilesystemPath: {
@@ -111,14 +110,14 @@ export const commandHandler = async ({
       extraErrorMessage: `Couldn't find package ${apiName} to generate the api implementation`,
       obj: apiName,
     },
-  })
+  });
 
   if (apiImplName) {
     await logErrorAndExitIfNotSatisfied({
       isValidElectrodeNativeModuleName: {
         name: apiImplName,
       },
-    })
+    });
   }
 
   if (manifestId) {
@@ -126,60 +125,52 @@ export const commandHandler = async ({
       manifestIdExists: {
         id: manifestId,
       },
-    })
+    });
   }
 
-  log.info(`Generating API implementation for ${apiName}`)
   const reactNativeVersion = await coreUtils.reactNativeManifestVersion({
     manifestId,
-  })
+  });
   if (!reactNativeVersion) {
     throw new Error(
-      'React Native version is not defined in Manifest. This sould not happen !'
-    )
+      'React Native version is not defined in Manifest. This should not happen!',
+    );
   }
-  log.debug(
-    `Will generate api implementation using react native version: ${reactNativeVersion}`
-  )
 
   if (jsOnly && nativeOnly) {
-    log.warn('Looks like both js and native are selected, should be only one')
-    nativeOnly = (await askUserToSelectAnEnvironment()) !== 'js'
-    jsOnly = !nativeOnly
+    log.warn('Looks like both js and native are selected, should be only one');
+    nativeOnly = (await askUserToSelectAnEnvironment()) !== 'js';
+    jsOnly = !nativeOnly;
   }
 
   if (!jsOnly && !nativeOnly) {
-    nativeOnly = (await askUserToSelectAnEnvironment()) !== 'js'
-    jsOnly = !nativeOnly
+    nativeOnly = (await askUserToSelectAnEnvironment()) !== 'js';
+    jsOnly = !nativeOnly;
   }
 
   const moduleType = nativeOnly
     ? ModuleTypes.NATIVE_API_IMPL
-    : ModuleTypes.JS_API_IMPL
+    : ModuleTypes.JS_API_IMPL;
 
-  if (
-    apiImplName &&
-    !checkIfModuleNameContainsSuffix(apiImplName, moduleType)
-  ) {
-    apiImplName = await promptUserToUseSuffixModuleName(apiImplName, moduleType)
+  if (apiImplName && !validateModuleName(apiImplName, moduleType)) {
+    apiImplName = await promptUserToUseSuggestedModuleName(
+      apiImplName,
+      moduleType,
+    );
   }
 
   // Must conform to definition of ElectrodeNativeModuleName
   if (!apiImplName) {
-    // camel case api name
-    const cameCaseName = coreUtils.camelize(apiDep.name!)
-    // remove number if present
-    const nameWithNoNumber = cameCaseName.replace(/\d+/g, '')
-    apiImplName = `${nameWithNoNumber}Impl${jsOnly ? 'Js' : 'Native'}`
+    const simpleName = apiName.replace(/^@(.+)\/|-api$/g, '');
+    apiImplName = `${simpleName}-${coreUtils.getModuleSuffix(moduleType)}`;
   }
 
   // If no package name is specified get default name from apiImplName
   if (!packageName) {
-    const defaultPackageName = (packageName = coreUtils.getDefaultPackageNameForModule(
+    packageName = coreUtils.getDefaultPackageNameForModule(
       apiImplName,
-      moduleType
-    ))
-    packageName = await askUserToInputPackageName({ defaultPackageName })
+      moduleType,
+    );
   }
 
   // Check if packageName is valid
@@ -187,12 +178,14 @@ export const commandHandler = async ({
     isValidNpmPackageName: {
       name: packageName,
     },
-  })
+  });
 
   // Skip npm check
   if (!skipNpmCheck && !(await performPkgNameConflictCheck(packageName))) {
-    throw new Error(`Aborting command `)
+    throw new Error(`Aborting command `);
   }
+
+  log.info(`Generating API implementation for ${apiName}`);
 
   await generateApiImpl({
     apiDependency: apiDep,
@@ -206,14 +199,14 @@ export const commandHandler = async ({
       apiImplHull: path.join(
         Platform.currentPlatformVersionPath,
         'ern-api-impl-gen',
-        'hull'
+        'hull',
       ),
       outDirectory: '',
     },
     reactNativeVersion,
     scope,
-  })
-  log.info('Success')
-}
+  });
+  log.info('Success');
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

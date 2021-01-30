@@ -1,11 +1,20 @@
-import { log } from 'ern-core'
-import { spawn } from 'child_process'
+import { log } from 'ern-core';
+import { spawn } from 'child_process';
+import fs from 'fs-extra';
+import path from 'path';
 
 export async function buildIosRunner(pathToIosRunner: string, udid: string) {
   return new Promise((resolve, reject) => {
+    const extraBuildOptions = fs.existsSync(
+      path.join(pathToIosRunner, 'ErnRunner.xcworkspace'),
+    )
+      ? [`-workspace`, `ErnRunner.xcworkspace`]
+      : [];
+
     const xcodebuildProc = spawn(
       'xcodebuild',
       [
+        ...extraBuildOptions,
         `-scheme`,
         'ErnRunner',
         'build',
@@ -13,16 +22,16 @@ export async function buildIosRunner(pathToIosRunner: string, udid: string) {
         `id=${udid}`,
         `SYMROOT=${pathToIosRunner}/build`,
       ],
-      { cwd: pathToIosRunner }
-    )
+      { cwd: pathToIosRunner },
+    );
 
-    xcodebuildProc.stdout.on('data', data => {
-      log.debug(data.toString())
-    })
-    xcodebuildProc.stderr.on('data', data => {
-      log.debug(data.toString())
-    })
-    xcodebuildProc.on('close', code => {
+    xcodebuildProc.stdout.on('data', (data) => {
+      log.debug(data.toString());
+    });
+    xcodebuildProc.stderr.on('data', (data) => {
+      log.debug(data.toString());
+    });
+    xcodebuildProc.on('close', (code) => {
       code === 0
         ? resolve()
         : reject(
@@ -30,8 +39,8 @@ export async function buildIosRunner(pathToIosRunner: string, udid: string) {
 To troubleshoot this build failure, we recommend building the Runner iOS project from Xcode.
 You can open the Runner project in Xcode manually or by running 'open ios/ErnRunner.xcodeproj'.
 Building the Runner from Xcode will provide more meaningful error reporting that can be of help
-to pinpoint the cause of the build failure.`)
-          )
-    })
-  })
+to pinpoint the cause of the build failure.`),
+          );
+    });
+  });
 }

@@ -1,18 +1,17 @@
-import { PackagePath, AppVersionDescriptor, log } from 'ern-core'
-import { getActiveCauldron } from 'ern-cauldron-api'
-import { syncCauldronContainer } from 'ern-orchestrator'
+import { AppVersionDescriptor, log, PackagePath } from 'ern-core';
+import { getActiveCauldron } from 'ern-cauldron-api';
+import { syncCauldronContainer } from 'ern-orchestrator';
 import {
+  askUserToChooseANapDescriptorFromCauldron,
   epilog,
   logErrorAndExitIfNotSatisfied,
-  askUserToChooseANapDescriptorFromCauldron,
   tryCatchWrap,
-} from '../../../lib'
-import _ from 'lodash'
-import { Argv } from 'yargs'
+} from '../../../lib';
+import { Argv } from 'yargs';
 
-export const command = 'miniapps <miniapps..>'
+export const command = 'miniapps <miniapps..>';
 export const desc =
-  'Add one or more MiniApp(s) to a given native application version in the Cauldron'
+  'Add one or more MiniApp(s) to a given native application version in the Cauldron';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -27,16 +26,15 @@ export const builder = (argv: Argv) => {
       describe: 'A complete native application descriptor',
       type: 'string',
     })
-    .coerce('descriptor', d => AppVersionDescriptor.fromString(d))
-    .coerce('miniapps', d => d.map(PackagePath.fromString))
+    .coerce('descriptor', (d) => AppVersionDescriptor.fromString(d))
+    .coerce('miniapps', (d) => d.map(PackagePath.fromString))
     .option('resetCache', {
-      default: false,
       describe:
         'Indicates whether to reset the React Native cache prior to bundling',
       type: 'boolean',
     })
-    .epilog(epilog(exports))
-}
+    .epilog(epilog(exports));
+};
 
 export const commandHandler = async ({
   containerVersion,
@@ -44,16 +42,16 @@ export const commandHandler = async ({
   miniapps,
   resetCache,
 }: {
-  containerVersion?: string
-  descriptor?: AppVersionDescriptor
-  miniapps: PackagePath[]
-  resetCache?: boolean
+  containerVersion?: string;
+  descriptor?: AppVersionDescriptor;
+  miniapps: PackagePath[];
+  resetCache?: boolean;
 }) => {
   descriptor =
     descriptor ||
     (await askUserToChooseANapDescriptorFromCauldron({
       onlyNonReleasedVersions: true,
-    }))
+    }));
 
   await logErrorAndExitIfNotSatisfied({
     isNewerContainerVersion: containerVersion
@@ -78,9 +76,9 @@ export const commandHandler = async ({
       extraErrorMessage:
         'This command cannot work on a non existing native application version',
     },
-  })
+  });
 
-  const cauldron = await getActiveCauldron()
+  const cauldron = await getActiveCauldron();
 
   const cauldronCommitMessage = [
     `${
@@ -88,20 +86,20 @@ export const commandHandler = async ({
         ? `Add ${miniapps[0]} MiniApp to ${descriptor}`
         : `Add multiple MiniApps to ${descriptor}`
     }`,
-  ]
+  ];
 
   await syncCauldronContainer(
     async () => {
       for (const miniApp of miniapps) {
-        cauldronCommitMessage.push(`- Add ${miniApp.basePath} MiniApp`)
+        cauldronCommitMessage.push(`- Add ${miniApp.basePath} MiniApp`);
       }
-      await cauldron.syncContainerMiniApps(descriptor!, miniapps)
+      await cauldron.syncContainerMiniApps(descriptor!, miniapps);
     },
     descriptor,
     cauldronCommitMessage,
-    { containerVersion, resetCache }
-  )
-  log.debug(`MiniApp(s) successfully added to ${descriptor}`)
-}
+    { containerVersion, resetCache },
+  );
+  log.debug(`MiniApp(s) successfully added to ${descriptor}`);
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

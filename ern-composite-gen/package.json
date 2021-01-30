@@ -6,8 +6,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "ern-typescript",
-    "coverage": "ern-nyc",
-    "instrument-dist": "ern-instrument-dist",
+    "instrument": "yarn nyc instrument dist --in-place",
     "prepublish": "yarn run build",
     "test": "ern-mocha"
   },
@@ -35,10 +34,12 @@
   },
   "homepage": "http://www.electrode.io",
   "dependencies": {
+    "cli-table": "^0.3.1",
     "ern-core": "1000.0.0",
     "fs-extra": "^8.1.0",
     "fs-readdir-recursive": "^1.1.0",
-    "mustache": "^2.3.1",
+    "js-beautify": "^1.13.0",
+    "mustache": "^4.0.1",
     "semver": "^5.5.0",
     "uuid": "^3.3.2"
   },
@@ -46,6 +47,6 @@
     "ern-util-dev": "1000.0.0"
   },
   "engines": {
-    "node": ">=8.3"
+    "node": ">=10"
   }
 }

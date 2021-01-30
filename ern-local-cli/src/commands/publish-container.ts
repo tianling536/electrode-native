@@ -1,12 +1,12 @@
-import { PackagePath, Platform, NativePlatform, log } from 'ern-core'
-import { publishContainer } from 'ern-container-publisher'
-import { parseJsonFromStringOrFile } from 'ern-orchestrator'
-import { epilog, logErrorAndExitIfNotSatisfied, tryCatchWrap } from '../lib'
-import { Argv } from 'yargs'
-import untildify from 'untildify'
+import { log, NativePlatform, PackagePath, Platform } from 'ern-core';
+import { publishContainer } from 'ern-container-publisher';
+import { parseJsonFromStringOrFile } from 'ern-orchestrator';
+import { epilog, logErrorAndExitIfNotSatisfied, tryCatchWrap } from '../lib';
+import { Argv } from 'yargs';
+import untildify from 'untildify';
 
-export const command = 'publish-container'
-export const desc = 'Publish a local Container'
+export const command = 'publish-container';
+export const desc = 'Publish a local Container';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -14,7 +14,7 @@ export const builder = (argv: Argv) => {
       describe: 'Local path to the Container to publish',
       type: 'string',
     })
-    .coerce('containerPath', p => untildify(p))
+    .coerce('containerPath', (p) => untildify(p))
     .option('extra', {
       alias: 'e',
       describe:
@@ -51,37 +51,44 @@ export const builder = (argv: Argv) => {
       describe: 'Container version to use for publication',
       type: 'string',
     })
-    .epilog(epilog(exports))
-}
+    .epilog(epilog(exports));
+};
 
-const publisherPackagePrefix = 'ern-container-publisher-'
+const publisherPackagePrefix = 'ern-container-publisher-';
 
 export const commandHandler = async ({
   containerPath,
   extra,
+  inPlace,
   platform,
   publisher,
   url,
   version,
 }: {
-  containerPath?: string
-  extra?: string
-  platform: NativePlatform
-  publisher: PackagePath
-  url: string
-  version: string
+  containerPath?: string;
+  extra?: string;
+  inPlace?: boolean;
+  platform: NativePlatform;
+  publisher: PackagePath;
+  url: string;
+  version: string;
 }) => {
   containerPath =
-    containerPath || Platform.getContainerGenOutDirectory(platform)
+    containerPath || Platform.getContainerGenOutDirectory(platform);
 
   await logErrorAndExitIfNotSatisfied({
     isContainerPath: {
       extraErrorMessage: `Make sure that ${containerPath} is the root of a Container project`,
       p: containerPath!,
     },
-  })
+  });
 
-  const extraObj = extra && (await parseJsonFromStringOrFile(extra))
+  let extraObj;
+  try {
+    extraObj = (extra && (await parseJsonFromStringOrFile(extra))) || {};
+  } catch (e) {
+    throw new Error('(--extra/-e option): Invalid input');
+  }
 
   if (
     publisher.isRegistryPath &&
@@ -89,20 +96,23 @@ export const commandHandler = async ({
   ) {
     publisher = publisher.version
       ? PackagePath.fromString(
-          `${publisherPackagePrefix}${publisher.basePath}@${publisher.version}`
+          `${publisherPackagePrefix}${publisher.basePath}@${publisher.version}`,
         )
-      : PackagePath.fromString(`${publisherPackagePrefix}${publisher.basePath}`)
+      : PackagePath.fromString(
+          `${publisherPackagePrefix}${publisher.basePath}`,
+        );
   }
 
   await publishContainer({
     containerPath,
     containerVersion: version,
     extra: extraObj,
+    inPlace,
     platform,
     publisher,
     url,
-  })
-  log.info('Container published successfully')
-}
+  });
+  log.info('Container published successfully');
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2015",
-    "lib": ["es2017"],
+    "target": "es2018",
+    "lib": ["es2018"],
     "baseUrl": ".",
     "paths": {
       "ern-*": ["ern-*/src"]
@@ -9,11 +9,11 @@
     "typeRoots": ["node_modules/@types", "./typings"],
     "module": "commonjs",
     "moduleResolution": "node",
-    "inlineSourceMap": true,
+    "sourceMap": true,
     "allowJs": true,
     "esModuleInterop": true,
     "strictNullChecks": true,
     "outDir": "dist",
     "noImplicitAny": true
-  }  
+  }
 }

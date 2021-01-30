@@ -1,25 +1,24 @@
-import fs from 'fs-extra'
-import { ApiGen } from 'ern-api-gen'
+import fs from 'fs-extra';
+import { ApiGen } from 'ern-api-gen';
 import {
-  PackagePath,
-  manifest,
-  utils as coreUtils,
-  ModuleTypes,
   log,
-  checkIfModuleNameContainsSuffix,
-} from 'ern-core'
+  manifest,
+  ModuleTypes,
+  PackagePath,
+  utils as coreUtils,
+  validateModuleName,
+} from 'ern-core';
 import {
   epilog,
   logErrorAndExitIfNotSatisfied,
   performPkgNameConflictCheck,
-  promptUserToUseSuffixModuleName,
+  promptUserToUseSuggestedModuleName,
   tryCatchWrap,
-  askUserToInputPackageName,
-} from '../lib'
-import { Argv } from 'yargs'
+} from '../lib';
+import { Argv } from 'yargs';
 
-export const command = 'create-api <apiName>'
-export const desc = 'Create a new api'
+export const command = 'create-api <apiName>';
+export const desc = 'Create a new api';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -37,7 +36,7 @@ export const builder = (argv: Argv) => {
     })
     .option('packageName', {
       alias: 'p',
-      describe: 'Name to use for the api NPM package',
+      describe: 'Name to use for the api npm package',
     })
     .option('schemaPath', {
       alias: 'm',
@@ -45,15 +44,15 @@ export const builder = (argv: Argv) => {
     })
     .option('scope', {
       alias: 's',
-      describe: 'Scope to use for the api NPM package',
+      describe: 'Scope to use for the api npm package',
     })
     .option('skipNpmCheck', {
       describe:
-        'Skip the check ensuring package does not already exists in NPM registry',
+        'Skip the check ensuring package does not already exists in npm registry',
       type: 'boolean',
     })
-    .epilog(epilog(exports))
-}
+    .epilog(epilog(exports));
+};
 
 export const commandHandler = async ({
   apiAuthor,
@@ -65,80 +64,78 @@ export const commandHandler = async ({
   scope,
   skipNpmCheck,
 }: {
-  apiAuthor?: string
-  apiName: string
-  apiVersion?: string
-  manifestId?: string
-  packageName: string
-  schemaPath?: string
-  scope?: string
-  skipNpmCheck?: boolean
+  apiAuthor?: string;
+  apiName: string;
+  apiVersion?: string;
+  manifestId?: string;
+  packageName: string;
+  schemaPath?: string;
+  scope?: string;
+  skipNpmCheck?: boolean;
 }) => {
   await logErrorAndExitIfNotSatisfied({
     isValidElectrodeNativeModuleName: {
       name: apiName,
     },
-  })
+  });
 
   if (manifestId) {
     await logErrorAndExitIfNotSatisfied({
       manifestIdExists: {
         id: manifestId,
       },
-    })
+    });
   }
 
   if (schemaPath && !(await fs.pathExists(schemaPath))) {
-    throw new Error(`Cannot resolve path to ${schemaPath}`)
+    throw new Error(`Cannot resolve path to ${schemaPath}`);
   }
 
-  if (!checkIfModuleNameContainsSuffix(apiName, ModuleTypes.API)) {
-    apiName = await promptUserToUseSuffixModuleName(apiName, ModuleTypes.API)
-  }
-
-  // Construct the package name
-  if (!packageName) {
-    const defaultPackageName = coreUtils.getDefaultPackageNameForModule(
+  if (!validateModuleName(apiName, ModuleTypes.API)) {
+    apiName = await promptUserToUseSuggestedModuleName(
       apiName,
-      ModuleTypes.API
-    )
-    packageName = await askUserToInputPackageName({ defaultPackageName })
+      ModuleTypes.API,
+    );
+  }
+
+  if (!packageName) {
+    packageName = coreUtils.getDefaultPackageNameForModule(
+      apiName,
+      ModuleTypes.API,
+    );
   }
 
   await logErrorAndExitIfNotSatisfied({
     isValidNpmPackageName: {
       name: packageName,
     },
-  })
+  });
 
   if (!skipNpmCheck && !(await performPkgNameConflictCheck(packageName))) {
-    throw new Error('Aborting command')
+    throw new Error('Aborting command');
   }
 
   const bridgeDep = await manifest.getNativeDependency(
     PackagePath.fromString('react-native-electrode-bridge'),
-    { manifestId }
-  )
+    { manifestId },
+  );
   if (!bridgeDep) {
     throw new Error(
-      'react-native-electrode-bridge not found in manifest. cannot infer version to use'
-    )
-  }
-  if (!bridgeDep.version) {
-    throw new Error('react-native-electrode-bridge version needs to be defined')
+      'react-native-electrode-bridge not found in manifest. cannot infer version to use',
+    );
   }
 
   const reactNative = await manifest.getNativeDependency(
     PackagePath.fromString('react-native'),
-    { manifestId }
-  )
+    { manifestId },
+  );
   if (!reactNative) {
     throw new Error(
-      'react-native-electrode-bridge not found in manifest. cannot infer version to use'
-    )
+      'react-native not found in manifest. cannot infer version to use',
+    );
   }
 
-  log.info(`Generating ${apiName} API`)
+  log.info(`Generating ${apiName}`);
 
   await ApiGen.generateApi({
     apiAuthor,
@@ -149,8 +146,8 @@ export const commandHandler = async ({
     npmScope: scope,
     packageName,
     reactNativeVersion: reactNative.version,
-  })
-  log.info('Success')
-}
+  });
+  log.info('Success');
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

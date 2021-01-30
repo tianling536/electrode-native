@@ -1,103 +1,103 @@
-import { assert, expect } from 'chai'
-import sinon from 'sinon'
-import inquirer from 'inquirer'
-import { ModuleTypes } from 'ern-core'
-import * as fixtures from './fixtures/common'
-import { promptUserToUseSuffixModuleName } from '../src/lib/promptUserToUseSuffixModuleName'
+import { expect } from 'chai';
+import sinon from 'sinon';
+import inquirer from 'inquirer';
+import { ModuleTypes } from 'ern-core';
+import * as fixtures from './fixtures/common';
+import { promptUserToUseSuggestedModuleName } from '../src/lib/promptUserToUseSuggestedModuleName';
 
 describe('promptUserToUseSuffixModuleName', () => {
-  const sandbox = sinon.createSandbox()
+  const sandbox = sinon.createSandbox();
 
-  let inquirerPromptStub
+  let inquirerPromptStub: any;
 
   beforeEach(() => {
-    inquirerPromptStub = sandbox.stub(inquirer, 'prompt')
-  })
+    inquirerPromptStub = sandbox.stub(inquirer, 'prompt');
+  });
 
   afterEach(() => {
-    sandbox.restore()
-  })
+    sandbox.restore();
+  });
 
-  it('return suffixed mini-app name if user confirms true', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: true })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return suggested miniapp name if user confirms true', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: true });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.MINIAPP
-    )
-    expect(result).to.be.equal(`${fixtures.npmPkgName}MiniApp`)
-  })
+      ModuleTypes.MINIAPP,
+    );
+    expect(result).to.be.equal(`${fixtures.npmPkgName}-miniapp`);
+  });
 
-  it('return suffixed api name if user confirms true', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: true })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return suggested api name if user confirms true', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: true });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.API
-    )
-    expect(result).to.be.equal(`${fixtures.npmPkgName}Api`)
-  })
+      ModuleTypes.API,
+    );
+    expect(result).to.be.equal(`${fixtures.npmPkgName}-api`);
+  });
 
-  it('return suffixed (js) api-impl name if user confirms true', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: true })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return suggested (js) api-impl name if user confirms true', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: true });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.JS_API_IMPL
-    )
-    expect(result).to.be.equal(`${fixtures.npmPkgName}ApiImplJs`)
-  })
+      ModuleTypes.JS_API_IMPL,
+    );
+    expect(result).to.be.equal(`${fixtures.npmPkgName}-api-impl-js`);
+  });
 
-  it('return suffixed (native) api-impl name if user confirms true', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: true })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return suggested (native) api-impl name if user confirms true', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: true });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.NATIVE_API_IMPL
-    )
-    expect(result).to.be.equal(`${fixtures.npmPkgName}ApiImplNative`)
-  })
+      ModuleTypes.NATIVE_API_IMPL,
+    );
+    expect(result).to.be.equal(`${fixtures.npmPkgName}-api-impl-native`);
+  });
 
-  it('return non-suffixed mini-app name if user selects false', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: false })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return original mini-app name if user selects false', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: false });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.MINIAPP
-    )
-    expect(result).to.be.equal(fixtures.npmPkgName)
-  })
+      ModuleTypes.MINIAPP,
+    );
+    expect(result).to.be.equal(fixtures.npmPkgName);
+  });
 
-  it('return non-suffixed api name if user selects false', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: false })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return original api name if user selects false', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: false });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.API
-    )
-    expect(result).to.be.equal(fixtures.npmPkgName)
-  })
+      ModuleTypes.API,
+    );
+    expect(result).to.be.equal(fixtures.npmPkgName);
+  });
 
-  it('return non-suffixed (js) api-impl name if user selects false', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: false })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return original (js) api-impl name if user selects false', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: false });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.JS_API_IMPL
-    )
-    expect(result).to.be.equal(fixtures.npmPkgName)
-  })
+      ModuleTypes.JS_API_IMPL,
+    );
+    expect(result).to.be.equal(fixtures.npmPkgName);
+  });
 
-  it('return non-suffixed (native) api-impl name if user selects false', async () => {
-    inquirerPromptStub.resolves({ useSuffixedModuleName: false })
-    const result = await promptUserToUseSuffixModuleName(
+  it('return original (native) api-impl name if user selects false', async () => {
+    inquirerPromptStub.resolves({ acceptSuggestion: false });
+    const result = await promptUserToUseSuggestedModuleName(
       fixtures.npmPkgName,
-      ModuleTypes.NATIVE_API_IMPL
-    )
-    expect(result).to.be.equal(fixtures.npmPkgName)
-  })
+      ModuleTypes.NATIVE_API_IMPL,
+    );
+    expect(result).to.be.equal(fixtures.npmPkgName);
+  });
 
-  it('return non-suffixed (native) api-impl name if user selects false', async () => {
+  it('return original (native) api-impl name if user selects false', async () => {
     try {
-      await promptUserToUseSuffixModuleName(
+      await promptUserToUseSuggestedModuleName(
         fixtures.npmPkgName,
-        fixtures.moduleTypeNotSupported
-      )
+        fixtures.moduleTypeNotSupported,
+      );
     } catch (e) {
-      expect(e.message).to.include('Unsupported module type :')
+      expect(e.message).to.include('Unsupported module type :');
     }
-  })
-})
+  });
+});

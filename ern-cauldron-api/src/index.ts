@@ -1,26 +1,26 @@
-import _CauldronApi from './CauldronApi'
-import _EphemeralFileStore from './EphemeralFileStore'
-import _InMemoryDocumentStore from './InMemoryDocumentStore'
-import _GitFileStore from './GitFileStore'
-import _GitDocumentStore from './GitDocumentStore'
-export { CauldronHelper } from './CauldronHelper'
-import _getActiveCauldron from './getActiveCauldron'
+import _CauldronApi from './CauldronApi';
+import _EphemeralFileStore from './EphemeralFileStore';
+import _InMemoryDocumentStore from './InMemoryDocumentStore';
+import _GitFileStore from './GitFileStore';
+import _GitDocumentStore from './GitDocumentStore';
+import { CauldronRepositories } from './CauldronRepositories';
 
-export const CauldronApi = _CauldronApi
-export const EphemeralFileStore = _EphemeralFileStore
-export const InMemoryDocumentStore = _InMemoryDocumentStore
-export const GitFileStore = _GitFileStore
-export const GitDocumentStore = _GitDocumentStore
-export const getActiveCauldron = _getActiveCauldron
+export { CauldronHelper } from './CauldronHelper';
 
-export * from './types'
+export const CauldronApi = _CauldronApi;
+export const EphemeralFileStore = _EphemeralFileStore;
+export const InMemoryDocumentStore = _InMemoryDocumentStore;
+export const GitFileStore = _GitFileStore;
+export const GitDocumentStore = _GitDocumentStore;
+
+export * from './types';
+export * from './getActiveCauldron';
 
 export {
   getSchemaVersionMatchingCauldronApiVersion,
   getCurrentSchemaVersion,
   cauldronFileUriScheme,
-} from './util'
+} from './util';
 
-import { CauldronRepositories } from './CauldronRepositories'
-export { CauldronRepositories } from './CauldronRepositories'
-export const cauldronRepositories = new CauldronRepositories()
+export { CauldronRepositories } from './CauldronRepositories';
+export const cauldronRepositories = new CauldronRepositories();

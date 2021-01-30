@@ -1,5 +1,5 @@
-import Mustache from 'mustache'
-import fs from 'fs-extra'
+import Mustache from 'mustache';
+import fs from 'fs-extra';
 
 // =============================================================================
 // Mustache related utilities
@@ -11,11 +11,12 @@ import fs from 'fs-extra'
 // returns: Rendered string output
 export async function mustacheRenderUsingTemplateFile(
   filename: string,
-  view: any
+  view: any,
+  partials?: any,
 ) {
   return fs
     .readFile(filename, 'utf8')
-    .then(template => Mustache.render(template, view))
+    .then((template) => Mustache.render(template, view, partials));
 }
 
 // Mustache render to an output file using a template file
@@ -25,11 +26,12 @@ export async function mustacheRenderUsingTemplateFile(
 export async function mustacheRenderToOutputFileUsingTemplateFile(
   templateFilename: string,
   view: any,
-  outputFile: string
+  outputFile: string,
+  partials?: any,
 ) {
-  return mustacheRenderUsingTemplateFile(templateFilename, view).then(
-    output => {
-      return fs.writeFile(outputFile, output)
-    }
-  )
+  return mustacheRenderUsingTemplateFile(templateFilename, view, partials).then(
+    (output) => {
+      return fs.writeFile(outputFile, output);
+    },
+  );
 }

@@ -1,17 +1,16 @@
 import {
-  epilog,
   askUserToChooseANapDescriptorFromCauldron,
+  epilog,
+  logErrorAndExitIfNotSatisfied,
   tryCatchWrap,
-} from '../lib'
-import { start } from 'ern-orchestrator'
-import _ from 'lodash'
-import { PackagePath, AppVersionDescriptor } from 'ern-core'
-import { Argv } from 'yargs'
-import untildify from 'untildify'
-import { logErrorAndExitIfNotSatisfied } from '../lib'
+} from '../lib';
+import { start } from 'ern-orchestrator';
+import { AppVersionDescriptor, PackagePath } from 'ern-core';
+import { Argv } from 'yargs';
+import untildify from 'untildify';
 
-export const command = 'start'
-export const desc = 'Start a composite MiniApp'
+export const command = 'start';
+export const desc = 'Start a composite MiniApp';
 
 export const builder = (argv: Argv) => {
   return argv
@@ -24,7 +23,7 @@ export const builder = (argv: Argv) => {
       describe: 'Base Composite',
       type: 'string',
     })
-    .coerce('baseComposite', d => PackagePath.fromString(d))
+    .coerce('baseComposite', (d) => PackagePath.fromString(d))
     .option('bundleId', {
       alias: 'b',
       describe: 'iOS Bundle Identifier',
@@ -34,25 +33,25 @@ export const builder = (argv: Argv) => {
       describe: 'Directory in which to generate the composite',
       type: 'string',
     })
-    .coerce('compositeDir', p => untildify(p))
+    .coerce('compositeDir', (p) => untildify(p))
     .option('descriptor', {
       alias: 'd',
       describe: 'Full native application selector',
       type: 'string',
     })
-    .coerce('descriptor', d => AppVersionDescriptor.fromString(d))
+    .coerce('descriptor', (d) => AppVersionDescriptor.fromString(d))
     .option('extraJsDependencies', {
       alias: 'e',
       describe:
         'Additional JavaScript dependencies to add to the composite JavaScript bundle',
       type: 'array',
     })
-    .coerce('extraJsDependencies', d => d.map(PackagePath.fromString))
+    .coerce('extraJsDependencies', (d) => d.map(PackagePath.fromString))
     .option('jsApiImpls', {
       describe: 'A list of one or more JS API Implementation(s)',
       type: 'array',
     })
-    .coerce('jsApiImpls', d => d.map(PackagePath.fromString))
+    .coerce('jsApiImpls', (d) => d.map(PackagePath.fromString))
     .option('flavor', {
       describe: 'Custom binary flavor',
     })
@@ -73,7 +72,7 @@ export const builder = (argv: Argv) => {
       describe: 'A list of one or more MiniApp(s)',
       type: 'array',
     })
-    .coerce('miniapps', d => d.map(PackagePath.fromString))
+    .coerce('miniapps', (d) => d.map(PackagePath.fromString))
     .option('packageName', {
       alias: 'p',
       describe: 'Android application package name',
@@ -99,17 +98,22 @@ export const builder = (argv: Argv) => {
       describe: 'Port to use for the local package',
       type: 'string',
     })
+    .option('resetCache', {
+      describe:
+        'Indicates whether to reset the React Native cache prior to bundling',
+      type: 'boolean',
+    })
     .group(
       ['activityName', 'launchFlags', 'packageName'],
-      'Android binary launch options:'
+      'Android binary launch options:',
     )
     .group(
       ['bundleId', 'launchEnvVars', 'launchArgs'],
-      'iOS binary launch options:'
+      'iOS binary launch options:',
     )
     .group(['disableBinaryStore', 'flavor'], 'Binary store specific options:')
-    .epilog(epilog(exports))
-}
+    .epilog(epilog(exports));
+};
 
 export const commandHandler = async ({
   activityName,
@@ -129,24 +133,26 @@ export const commandHandler = async ({
   port,
   watchNodeModules,
   disableBinaryStore,
+  resetCache,
 }: {
-  activityName?: string
-  baseComposite?: PackagePath
-  bundleId?: string
-  compositeDir?: string
-  descriptor?: AppVersionDescriptor
-  extraJsDependencies?: PackagePath[]
-  flavor?: string
-  host?: string
-  jsApiImpls?: PackagePath[]
-  launchArgs?: string
-  launchEnvVars?: string
-  launchFlags?: string
-  miniapps?: PackagePath[]
-  packageName?: string
-  port?: string
-  watchNodeModules?: string[]
-  disableBinaryStore?: boolean
+  activityName?: string;
+  baseComposite?: PackagePath;
+  bundleId?: string;
+  compositeDir?: string;
+  descriptor?: AppVersionDescriptor;
+  extraJsDependencies?: PackagePath[];
+  flavor?: string;
+  host?: string;
+  jsApiImpls?: PackagePath[];
+  launchArgs?: string;
+  launchEnvVars?: string;
+  launchFlags?: string;
+  miniapps?: PackagePath[];
+  packageName?: string;
+  port?: string;
+  watchNodeModules?: string[];
+  disableBinaryStore?: boolean;
+  resetCache?: boolean;
 } = {}) => {
   await logErrorAndExitIfNotSatisfied({
     metroServerIsNotRunning: {
@@ -154,10 +160,10 @@ export const commandHandler = async ({
       host: host || 'localhost',
       port: port || '8081',
     },
-  })
+  });
 
   if (!miniapps && !descriptor) {
-    descriptor = await askUserToChooseANapDescriptorFromCauldron()
+    descriptor = await askUserToChooseANapDescriptorFromCauldron();
   }
 
   await start({
@@ -177,8 +183,9 @@ export const commandHandler = async ({
     miniapps,
     packageName,
     port,
+    resetCache,
     watchNodeModules,
-  })
-}
+  });
+};
 
-export const handler = tryCatchWrap(commandHandler)
+export const handler = tryCatchWrap(commandHandler);

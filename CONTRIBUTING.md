@@ -5,7 +5,7 @@ You can contribute to the Electrode Native open source project in several ways:
 - As an Electrode Native user, if you face any issue with the platform, you can open a [new issue].
 - While reading the documentation, if you notice any typo (even a minor typpo ;), any misleading or wrong information or missing content, you can edit the documentation directly and issue a Pull Request. Using GitHub, this can be done online without having to fork the repository on your workstation.
 - If you want to suggest a new feature or an improvement for an existing one, you can create a [new issue]. Over time, we will create labels to easily classify issues.
-- In case you would like to use a native module that is not currently supported by Electrode Native, you can contribute a plugin configuration in the master manifest to add support for this native module. Check the documentation on [Reusing existing native modules](https://electrode.gitbooks.io/electrode-native/content/platform-parts/manifest.html#reusing-exiting-native-modules) for more information.
+- In case you would like to use a native module that is not currently supported by Electrode Native, you can contribute a plugin configuration in the master manifest to add support for this native module. Check the documentation on [Reusing existing native modules](https://native.electrode.io/reference/index-3#reusing-existing-native-modules) for more information.
 - By resolving an [open issue]. For this you'll have to setup your workstation accordingly to be able to work on the platform code, as explained below.
 - You can also contribute to the [Electrode Native Bridge] library.
 
@@ -22,7 +22,7 @@ If you want to contribute code to the Electrode Native platform, you'll first ne
 1. If you have not already installed the platform, install by running the following command:
 
     ```bash
-    npm install -g electrode-native && ern
+    npm install -g electrode-native
     ```
 
 1. Fork and clone the `electrode-native` repository.
@@ -67,11 +67,33 @@ Electrode Native has a pre-commit hook setup, that will run [tslint] for every c
 
 ### Tests
 
-Tests can be run by running the `yarn test` command from the root of the `electrode-native` directory. Tests from all modules will be executed.
+Electrode Native contains two different test suites :
+- Unit tests
+- System tests
+
+The unit test suite is not taking long to run, and will be run on any `git push`. You can also run them manually, by running `yarn test:unit` from the root of the `electrode-native` directory. Tests from all modules will be executed.
+
+System tests are running `ern` commands as a user would do. This test suite is taking way longer to run than the unit tests one, and should mostly only be run following heavy modifications to the code base. They can be launched by running `yarn test:system` from the root of the `electrode-native` directory.
 
 Our tests are written using [mocha], [chai] and [sinon].
 
-The tests are not executed on every commit. Ideally, you should run the test suite before opening a PR.
+### Coverage
+
+We are using [nyc][5] to generate and report test coverage.
+
+The following commands can be used to get coverage reports locally:
+
+- `yarn coverage:unit`\
+To generate and report unit tests coverage
+- `yarn coverage:system`\
+To generate and report system tests coverage
+- `yarn coverage`\
+To generate and report combined UT/ST coverage
+
+Once done, the coverage will be reported in the terminal.\
+An html report will also be generated in the `coverage` directory.
+
+Combine UT/ST coverage of the `master` branch is posted daily to [coveralls][6].
 
 ## Guidelines for documentation contributions
 
@@ -111,14 +133,15 @@ You can keep the server running. Any time you'll do a change in the documentatio
 
 ## Continuous Integration
 
-We are using [Travis] for our Continuous Integration (CI).
+We are using [Azure DevOps] for our Continuous Integration (CI).
 
-The CI job is run on every opened Pull Request (PR). It runs [TSLint][4] checks along with running the whole platform test suite.
+The CI job is run on every opened Pull Request (PR). It runs [TSLint][4] checks along with running all of the unit tests, in parallel, on Windows, Linux and OSX, as well as running all of the unit tests on a Linux node for different Node versions (8/10 and 12).
 
-We will only merge PRs that pass the CI (green status). TSLint checks are automatically run for you on every commit, so you should not have any surprise for these checks when it comes to the CI.
-However the tests are not automatically run on every commit, so before opening a PR please ensure that all tests are passing on your workstation by running the `yarn test` command.
+We will only merge PRs that pass the CI (green status). TSLint checks are automatically run for you on every commit, and unit tests will be executed on git push, so you should not have any surprise for these checks when it comes to the CI.
 
-[travis]: https://travis-ci.org/
+Another CI job is taking care of running the complete system test suite daily.
+
+[Azure DevOps]: https://dev.azure.com/ElectrodeNative/Electrode%20Native/_build?definitionId=1&_a=summary
 
 [new issue]: https://github.com/electrode-io/electrode-native/issues/new
 
@@ -146,3 +169,5 @@ However the tests are not automatically run on every commit, so before opening a
 [2]: https://github.com/lerna/lerna
 [3]: https://github.com/yarnpkg/yarn
 [4]: https://palantir.github.io/tslint/
+[5]: https://github.com/istanbuljs/nyc
+[6]: https://coveralls.io/github/electrode-io/electrode-native

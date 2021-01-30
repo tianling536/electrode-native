@@ -1,7 +1,7 @@
-import { generateComposite } from 'ern-composite-gen'
-import { BundlingResult, kax, NativePlatform, PackagePath, log } from 'ern-core'
-import { reactNativeBundleAndroid } from './reactNativeBundleAndroid'
-import { reactNativeBundleIos } from './reactNativeBundleIos'
+import { generateComposite } from 'ern-composite-gen';
+import { BundlingResult, kax, NativePlatform, PackagePath } from 'ern-core';
+import { reactNativeBundleAndroid } from './reactNativeBundleAndroid';
+import { reactNativeBundleIos } from './reactNativeBundleIos';
 
 export async function bundleMiniApps(
   // The miniapps to be bundled
@@ -17,31 +17,34 @@ export async function bundleMiniApps(
     baseComposite,
     jsApiImplDependencies,
     resolutions,
+    metroExtraNodeModules,
     extraJsDependencies,
     resetCache,
   }: {
-    bundleOutput?: string
-    pathToYarnLock?: string
-    dev?: boolean
-    sourceMapOutput?: string
-    baseComposite?: PackagePath
-    jsApiImplDependencies?: PackagePath[]
-    resolutions?: { [pkg: string]: string }
-    extraJsDependencies?: PackagePath[]
-    resetCache?: boolean
-  } = {}
+    bundleOutput?: string;
+    pathToYarnLock?: string;
+    dev?: boolean;
+    sourceMapOutput?: string;
+    baseComposite?: PackagePath;
+    jsApiImplDependencies?: PackagePath[];
+    resolutions?: { [pkg: string]: string };
+    metroExtraNodeModules?: { [pkg: string]: string };
+    extraJsDependencies?: PackagePath[];
+    resetCache?: boolean;
+  } = {},
 ): Promise<BundlingResult> {
   await kax.task('Generating MiniApps Composite').run(
     generateComposite({
       baseComposite,
       extraJsDependencies,
       jsApiImplDependencies,
+      metroExtraNodeModules,
       miniApps,
       outDir: compositeDir,
       pathToYarnLock,
       resolutions,
-    })
-  )
+    }),
+  );
 
   return bundleMiniAppsFromComposite({
     bundleOutput,
@@ -51,7 +54,7 @@ export async function bundleMiniApps(
     platform,
     resetCache,
     sourceMapOutput,
-  })
+  });
 }
 
 export async function bundleMiniAppsFromComposite({
@@ -63,13 +66,13 @@ export async function bundleMiniAppsFromComposite({
   resetCache,
   sourceMapOutput,
 }: {
-  bundleOutput?: string
-  compositeDir: string
-  dev?: boolean
-  outDir: string
-  platform: NativePlatform
-  resetCache?: boolean
-  sourceMapOutput?: string
+  bundleOutput?: string;
+  compositeDir: string;
+  dev?: boolean;
+  outDir: string;
+  platform: NativePlatform;
+  resetCache?: boolean;
+  sourceMapOutput?: string;
 }): Promise<BundlingResult> {
   return kax.task('Running Metro Bundler').run(
     platform === 'android'
@@ -88,6 +91,6 @@ export async function bundleMiniAppsFromComposite({
           outDir,
           resetCache,
           sourceMapOutput,
-        })
-  )
+        }),
+  );
 }

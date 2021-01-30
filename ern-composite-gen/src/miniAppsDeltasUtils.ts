@@ -1,9 +1,9 @@
-import { log, PackagePath, yarn, utils, kax } from 'ern-core'
+import { kax, log, PackagePath, utils, yarn } from 'ern-core';
 import {
   getYarnLockTopLevelDependencyRe,
   getYarnLockTopLevelGitDependencyRe,
-} from './yarnLockUtils'
-import _ from 'lodash'
+} from './yarnLockUtils';
+import _ from 'lodash';
 
 /**
  * Represent the changes (deltas) in term of MiniApps versions
@@ -14,18 +14,18 @@ export interface MiniAppsDeltas {
    * MiniApps that are not present in the reference set but are
    * present in the comparand.
    */
-  new?: PackagePath[]
+  new?: PackagePath[];
   /**
    * MiniApps that are present in both sets with the same version.
    */
-  same?: PackagePath[]
+  same?: PackagePath[];
   /**
    * Miniapps that are present in both sets but with different versions.
    * The version of the MiniApps in this array reflects the version of
    * the comparand (i.e target upgrade verison), not the reference.
    * NOTE: The term `upgraded` is misleading here.
    */
-  upgraded?: PackagePath[]
+  upgraded?: PackagePath[];
 }
 
 /**
@@ -36,17 +36,17 @@ export interface MiniAppsDeltas {
  */
 export function getMiniAppsDeltas(
   miniApps: PackagePath[],
-  yarnlock: string
+  yarnlock: string,
 ): MiniAppsDeltas {
   return _.groupBy(miniApps, (m: PackagePath) => {
-    const re = getYarnLockTopLevelDependencyRe(m)
-    const match = re.exec(yarnlock)
+    const re = getYarnLockTopLevelDependencyRe(m);
+    const match = re.exec(yarnlock);
     if (match === null) {
-      return 'new'
+      return 'new';
     } else {
-      return match[2 /*version*/] === m.version ? 'same' : 'upgraded'
+      return match[2 /*version*/] === m.version ? 'same' : 'upgraded';
     }
-  })
+  });
 }
 
 /**
@@ -58,82 +58,76 @@ export function getMiniAppsDeltas(
  */
 export function getPackageJsonDependenciesUsingMiniAppDeltas(
   miniAppsDeltas: MiniAppsDeltas,
-  yarnlock: string
+  yarnlock: string,
 ): { [name: string]: string } {
-  const result: { [name: string]: string } = {}
+  const result: { [name: string]: string } = {};
 
   if (miniAppsDeltas.same) {
     for (const m of miniAppsDeltas.same) {
       if (m.isRegistryPath) {
         // Sample package.json entry :
         // "my-miniapp": "0.8.3"
-        result[m.basePath] = m.version!
+        result[m.basePath] = m.version!;
       } else if (m.isGitPath) {
         // For a git based dependency, the name of the dependency as
         // seen in package.json is not know by the PackagePath object
         // Only way to find the name of the dependency is to look in
         // the yarn.lock file as it records the name of git based dependencies
         const name = getYarnLockTopLevelGitDependencyRe(m).exec(
-          yarnlock
-        )![1 /*name*/]
+          yarnlock,
+        )![1 /*name*/];
         // Sample package.json entry :
         // "my-miniapp": "https://github.com/org/MyMiniApp.git#master"
-        result[name] = m.fullPath
+        result[name] = m.fullPath;
       }
     }
   }
 
   if (miniAppsDeltas.upgraded) {
     for (const m of miniAppsDeltas.upgraded) {
-      const re = getYarnLockTopLevelDependencyRe(m)
-      const initialVersion = re.exec(yarnlock)![2 /*version*/]
+      const re = getYarnLockTopLevelDependencyRe(m);
+      const initialVersion = re.exec(yarnlock)![2 /*version*/];
       // Please see comment above, in miniAppsDeltas.same to understand
       // the distinction between registry v.s git dependency.
       if (m.isRegistryPath) {
-        result[m.basePath] = initialVersion
+        result[m.basePath] = initialVersion;
       } else if (m.isGitPath) {
         const name = getYarnLockTopLevelGitDependencyRe(m).exec(
-          yarnlock
-        )![1 /*name*/]
-        result[name] = `${m.basePath}#${initialVersion}`
+          yarnlock,
+        )![1 /*name*/];
+        result[name] = `${m.basePath}#${initialVersion}`;
       }
     }
   }
 
-  return result
+  return result;
 }
 
 export async function runYarnUsingMiniAppDeltas(
-  miniAppsDeltas: MiniAppsDeltas
+  miniAppsDeltas: MiniAppsDeltas,
 ) {
   //
   // Now we can `yarn add` for new MiniApps
   if (miniAppsDeltas.new) {
     for (const newMiniAppVersion of miniAppsDeltas.new) {
-      log.debug(`Adding new MiniApp ${newMiniAppVersion.toString()}`)
+      log.debug(`Adding new MiniApp ${newMiniAppVersion.toString()}`);
       await kax
         .task(`Adding ${newMiniAppVersion}`)
-        .run(yarn.add(newMiniAppVersion))
+        .run(yarn.add(newMiniAppVersion));
     }
   }
 
-  // !!! TODO !!!
-  // We run `yarn upgrade` here but that might not be the safest solution
-  // as `yarn upgrade` will run a full upgrade of all dependencies of the
-  // MiniApp, transitively, which might not be desired.
-  // Indeed if we want to be as close to the yarn.lock as possible, running
-  // `yarn add` for upgraded dependencies will only upgrade the MiniApp
-  // version but will leave its dependency graph untouched, based
-  // on yarn.lock.
-  // It might be better to given more control to the MiniApp team on
-  // dependency control.
+  //
+  // We also run `yarn add` for any upgraded MiniApps insead of
+  // `yarn upgrade`, to ensure that the dependency graph of the
+  // MiniApp will remain as close to the existing yarn.lock as
+  // possible
   if (miniAppsDeltas.upgraded) {
     for (const upgradedMiniAppVersion of miniAppsDeltas.upgraded) {
-      log.debug(`Upgrading MiniApp ${upgradedMiniAppVersion.toString()}`)
-      // TODO : Once again ... Do we really want upgrade here ?
+      log.debug(`Upgrading MiniApp ${upgradedMiniAppVersion.toString()}`);
       await kax
         .task(`Upgrading ${upgradedMiniAppVersion}`)
-        .run(yarn.upgrade(upgradedMiniAppVersion))
+        .run(yarn.add(upgradedMiniAppVersion));
     }
   }
 
@@ -152,11 +146,11 @@ export async function runYarnUsingMiniAppDeltas(
         (await utils.isGitBranch(sameMiniAppVersion))
       ) {
         log.debug(
-          `Re-adding git based MiniApp ${sameMiniAppVersion.toString()}`
-        )
+          `Re-adding git based MiniApp ${sameMiniAppVersion.toString()}`,
+        );
         await kax
           .task(`Adding ${sameMiniAppVersion}`)
-          .run(yarn.add(sameMiniAppVersion))
+          .run(yarn.add(sameMiniAppVersion));
       }
     }
   }
