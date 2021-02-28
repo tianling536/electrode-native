@@ -203,6 +203,16 @@ export interface IosPluginConfig extends CommonPluginConfig {
    */
   extraPods?: string[];
   /**
+   * Array of extra pod specs sources that will be injected in
+   * Container Podfile
+   */
+  extraPodspecsSources?: string[];
+  /**
+   * Array of extra pod statements that will be injected in
+   * Container Podfile
+   */
+  extraPodfileStatements?: string[];
+  /**
    * Indicates whether this plugin requires manual linking
    * If that's the case, all plugin directives will be processed
    * independently of the react native version used
